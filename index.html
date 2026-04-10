@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>toio Lab Web - Gemma4 Controller</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Background Elements -->
+    <div class="bg-shape shape-1"></div>
+    <div class="bg-shape shape-2"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="glass-panel">
+            <div class="logo">
+                <span class="logo-emoji">🤖</span>
+                <h1>toio Lab</h1>
+            </div>
+            <div class="header-controls">
+                <button id="settings-btn" class="icon-btn" title="設定">⚙️</button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- Sidebar (Controls & Status) -->
+            <aside class="sidebar glass-panel">
+                <section class="control-section">
+                    <h2>LLM Connection</h2>
+                    <div class="status-indicator">
+                        <span id="ollama-status-dot" class="dot disconnected"></span>
+                        <span id="ollama-status-text">Ollama: Checking...</span>
+                    </div>
+                </section>
+
+                <section class="control-section">
+                    <h2>toio Connection</h2>
+                    <div class="status-indicator">
+                        <span id="toio-status-dot" class="dot disconnected"></span>
+                        <span id="toio-status-text">Disconnected</span>
+                    </div>
+                    <div class="cube-info" id="cube-info" style="display: none;">
+                        <div class="info-row">
+                            <span>Battery</span>
+                            <span id="battery-level">--%</span>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button id="connect-toio-btn" class="primary-btn">Connect Cube</button>
+                        <button id="disconnect-toio-btn" class="secondary-btn" disabled>Disconnect</button>
+                    </div>
+                </section>
+
+                <section class="control-section quick-actions">
+                    <h2>Quick Actions</h2>
+                    <div class="action-grid">
+                        <button class="action-btn" data-action="move_forward" title="前へ">⬆️</button>
+                        <button class="action-btn" data-action="move_backward" title="後ろへ">⬇️</button>
+                        <button class="action-btn" data-action="spin" title="回る">🔄</button>
+                        <button class="action-btn" data-action="stop" title="止まる">⏹️</button>
+                    </div>
+                    <div class="color-grid">
+                        <button class="color-btn" style="background: red;" data-color="255,0,0"></button>
+                        <button class="color-btn" style="background: lime;" data-color="0,255,0"></button>
+                        <button class="color-btn" style="background: blue;" data-color="0,0,255"></button>
+                        <button class="color-btn" style="background: white;" data-color="255,255,255"></button>
+                    </div>
+                </section>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="chat-area glass-panel">
+                <div class="chat-history" id="chat-history">
+                    <div class="message system">
+                        <div class="message-content">
+                            こんにちは！Gemma4を搭載したtoioコントローラーです。<br>
+                            「前に少し進んで」「青色に光らせて」などの言葉で操作できます。<br>
+                            まずは左のパネルからtoioと接続してください。
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-container">
+                    <textarea id="chat-input" placeholder="toioに話しかける... (Enterで送信)" rows="1"></textarea>
+                    <button id="send-btn" class="send-btn" disabled>
+                        <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content glass-panel">
+            <h2>設定</h2>
+            <div class="form-group">
+                <label for="ollama-url">Ollama URL</label>
+                <input type="text" id="ollama-url" value="http://localhost:11434">
+            </div>
+            <div class="form-group">
+                <label for="ollama-model">Model</label>
+                <input type="text" id="ollama-model" value="gemma4:e4b">
+            </div>
+            <div class="modal-actions">
+                <button id="save-settings-btn" class="primary-btn">保存</button>
+                <button id="close-settings-btn" class="secondary-btn">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/toio-ble.js"></script>
+    <script src="js/tools-schema.js"></script>
+    <script src="js/ollama-client.js"></script>
+    <script src="js/tool-executor.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
