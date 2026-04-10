@@ -36,7 +36,7 @@ class ToioSim {
     async move(leftSpeed, rightSpeed, durationMs = 0) {
         this.leftSpeed = leftSpeed;
         this.rightSpeed = rightSpeed;
-        this.isMoving = true;
+        this.isMoving = (leftSpeed !== 0 || rightSpeed !== 0);
 
         if (durationMs > 0) {
             return new Promise(resolve => {
@@ -60,6 +60,33 @@ class ToioSim {
         const s = direction === 'cw' ? speed : -speed;
         return this.move(s, -s, durationMs);
     }
+
+    // --- Coordinate Mapping ---
+    // Simple mat area coordinate range: X(98-402), Y(142-358)
+    // Sim pixel range: 0-400 (default)
+
+    matToSim(matX, matY) {
+        const matMinX = 98, matMaxX = 402;
+        const matMinY = 142, matMaxY = 358;
+        const simW = this.matElement?.clientWidth || 400;
+        const simH = this.matElement?.clientHeight || 400;
+
+        const x = ((matX - matMinX) / (matMaxX - matMinX)) * simW;
+        const y = ((matY - matMinY) / (matMaxY - matMinY)) * simH;
+        return { x, y };
+    }
+
+    simToMat(simX, simY) {
+        const matMinX = 98, matMaxX = 402;
+        const matMinY = 142, matMaxY = 358;
+        const simW = this.matElement?.clientWidth || 400;
+        const simH = this.matElement?.clientHeight || 400;
+
+        const x = Math.round((simX / simW) * (matMaxX - matMinX) + matMinX);
+        const y = Math.round((simY / simH) * (matMaxY - matMinY) + matMinY);
+        return { x, y };
+    }
+
 
     async setLight(r, g, b, durationMs = 0) {
         if (this.cubeElement) {

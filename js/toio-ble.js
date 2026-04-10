@@ -4,6 +4,7 @@
  */
 
 const TOIO_SERVICE_UUID = "10b20100-5b3b-4571-9508-cf3efcd7bbae";
+const POSITION_ID_CHAR_UUID = "10b20101-5b3b-4571-9508-cf3efcd7bbae";
 const MOTOR_CHAR_UUID = "10b20102-5b3b-4571-9508-cf3efcd7bbae";
 const LIGHT_CHAR_UUID = "10b20103-5b3b-4571-9508-cf3efcd7bbae";
 const SOUND_CHAR_UUID = "10b20104-5b3b-4571-9508-cf3efcd7bbae";
@@ -16,15 +17,24 @@ class ToioBLE {
         this.server = null;
         this.service = null;
         this.characteristics = {
+            id: null,
             motor: null,
             light: null,
             sound: null,
             battery: null,
             button: null
         };
+
+        // State
+        this.x = 0;
+        this.y = 0;
+        this.angle = 0;
+        this.isMoving = false;
+
         this.onDisconnectCallback = null;
         this.onBatteryUpdateCallback = null;
         this.onButtonUpdateCallback = null;
+        this.onIdUpdateCallback = null;
     }
 
     get isConnected() {
@@ -51,6 +61,7 @@ class ToioBLE {
             this.service = await this.server.getPrimaryService(TOIO_SERVICE_UUID);
 
             console.log("Getting Characteristics...");
+            this.characteristics.id = await this.service.getCharacteristic(POSITION_ID_CHAR_UUID);
             this.characteristics.motor = await this.service.getCharacteristic(MOTOR_CHAR_UUID);
             this.characteristics.light = await this.service.getCharacteristic(LIGHT_CHAR_UUID);
             this.characteristics.sound = await this.service.getCharacteristic(SOUND_CHAR_UUID);
@@ -58,8 +69,12 @@ class ToioBLE {
             this.characteristics.button = await this.service.getCharacteristic(BUTTON_CHAR_UUID);
 
             // Enable Notifications
+            await this.characteristics.id.startNotifications();
+            this.characteristics.id.addEventListener('characteristicvaluechanged', this._handleIdUpdate.bind(this));
+
             await this.characteristics.battery.startNotifications();
             this.characteristics.battery.addEventListener('characteristicvaluechanged', this._handleBatteryUpdate.bind(this));
+
 
             await this.characteristics.button.startNotifications();
             this.characteristics.button.addEventListener('characteristicvaluechanged', this._handleButtonUpdate.bind(this));
@@ -96,6 +111,7 @@ class ToioBLE {
         this.server = null;
         this.service = null;
         this.characteristics = {
+            id: null,
             motor: null,
             light: null,
             sound: null,
@@ -105,6 +121,24 @@ class ToioBLE {
     }
 
     // --- Private Handlers ---
+
+    _handleIdUpdate(event) {
+        try {
+            const dv = event.target.value;
+            const type = dv.getUint8(0);
+            if (type === 0x01) { // Position ID
+                this.x = dv.getUint16(1, true);
+                this.y = dv.getUint16(3, true);
+                this.angle = dv.getUint16(5, true);
+
+                if (this.onIdUpdateCallback) {
+                    this.onIdUpdateCallback({ x: this.x, y: this.y, angle: this.angle });
+                }
+            }
+        } catch (e) {
+            console.warn("ID update parse error:", e);
+        }
+    }
 
     _handleBatteryUpdate(event) {
         const value = event.target.value.getUint8(0);
@@ -143,27 +177,27 @@ class ToioBLE {
     async move(leftSpeed, rightSpeed, durationMs = 0) {
         if (!this.isConnected) return;
 
-        // Map -100~100 to parameter format
-        // direction: 0x01(forward), 0x02(backward)
-        // speed: mapped to 0-255. Let's use 0-100 directly for simplicity.
-        
+        this.isMoving = (leftSpeed !== 0 || rightSpeed !== 0);
+
         const leftDir = leftSpeed >= 0 ? 0x01 : 0x02;
         const rightDir = rightSpeed >= 0 ? 0x01 : 0x02;
         const lSpd = Math.min(255, Math.abs(leftSpeed));
         const rSpd = Math.min(255, Math.abs(rightSpeed));
 
         if (durationMs > 0) {
-            // Motor control with specified duration
             let dur = Math.floor(durationMs / 10);
-            if(dur > 255) dur = 255; // Max 2.55s per command
+            if(dur > 255) dur = 255;
             
             const buf = new Uint8Array([0x02, 0x01, leftDir, lSpd, 0x02, rightDir, rSpd, dur]);
             await this.characteristics.motor.writeValueWithoutResponse(buf);
 
-            // Wait for completion if duration is set (roughly)
-            return new Promise(resolve => setTimeout(resolve, durationMs + 50));
+            return new Promise(resolve => {
+                setTimeout(() => {
+                    this.isMoving = false;
+                    resolve();
+                }, durationMs + 50);
+            });
         } else {
-            // Continuous motion
             const buf = new Uint8Array([0x01, 0x01, leftDir, lSpd, 0x02, rightDir, rSpd]);
             await this.characteristics.motor.writeValueWithoutResponse(buf);
             return Promise.resolve();
@@ -171,12 +205,48 @@ class ToioBLE {
     }
 
     async stop() {
+        this.isMoving = false;
         return this.move(0, 0, 0);
     }
 
     async spin(speed, durationMs, direction = 'cw') {
         const s = direction === 'cw' ? speed : -speed;
         return this.move(s, -s, durationMs);
+    }
+
+    /**
+     * Move to target coordinate
+     * @param {number} x Mat coordinate X
+     * @param {number} y Mat coordinate Y
+     * @param {number} angle Angle 0-360
+     */
+    async moveTo(x, y, angle = 0) {
+        if (!this.isConnected) return;
+
+        this.isMoving = true;
+        const buf = new Uint8Array(13);
+        buf[0] = 0x03; // Targeted move
+        buf[1] = 0x00; // Control ID
+        buf[2] = 0x00; // Timeout
+        buf[3] = 0x01; // Movement type (Target + Angle)
+        buf[4] = 0x50; // Max speed
+        buf[5] = 0x00; // Speed type
+        buf[6] = 0x00; // Reserved
+        
+        const dv = new DataView(buf.buffer);
+        dv.setUint16(7, x, true);
+        dv.setUint16(9, y, true);
+        dv.setUint16(11, angle, true);
+
+        await this.characteristics.motor.writeValueWithoutResponse(buf);
+        
+        // We don't have a reliable way to know when it finishes without looking at ID sensor
+        // but for now let's reset it after a reasonable time or let the sync handle it.
+        // Actually, Targeted Move finishes on its own.
+        // Let's keep isMoving true for a short burst then let ID sensor decide?
+        // No, targeted move can take time.
+        // For simplicity in this sync requirement, we set isMoving = true and 
+        // rely on explicit stop() or next move() to change it.
     }
 
     // --- Indicator Control ---

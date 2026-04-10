@@ -28,37 +28,79 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- State & Instances ---
     const toioBle = new ToioBLE();
     const toioSim = new ToioSim();
+    
+    // Wrapper to multicast commands to both Sim and BLE
+    const combinedToio = {
+        get isConnected() { return true; }, // Sim is always available
+        async move(l, r, d) {
+            await Promise.all([
+                toioSim.move(l, r, d),
+                toioBle.isConnected ? toioBle.move(l, r, d) : Promise.resolve()
+            ]);
+        },
+        async stop() {
+            await Promise.all([
+                toioSim.stop(),
+                toioBle.isConnected ? toioBle.stop() : Promise.resolve()
+            ]);
+        },
+        async spin(s, d, dir) {
+            await Promise.all([
+                toioSim.spin(s, d, dir),
+                toioBle.isConnected ? toioBle.spin(s, d, dir) : Promise.resolve()
+            ]);
+        },
+        async setLight(r, g, b, d) {
+            await Promise.all([
+                toioSim.setLight(r, g, b, d),
+                toioBle.isConnected ? toioBle.setLight(r, g, b, d) : Promise.resolve()
+            ]);
+        },
+        async playSound(n, d) {
+            await Promise.all([
+                toioSim.playSound(n, d),
+                toioBle.isConnected ? toioBle.playSound(n, d) : Promise.resolve()
+            ]);
+        },
+        async getBattery() {
+            return toioBle.isConnected ? toioBle.getBattery() : toioSim.getBattery();
+        }
+    };
+
     let ollama = new OllamaClient();
-    let activeToio = toioSim; // Default to Simulator for easier testing
+    let activeToio = combinedToio; 
     let isProcessingChat = false;
 
     // --- initialization ---
     const executor = new ToolExecutor(activeToio);
     checkOllamaConnection();
     
-    // Initial UI Setup for Simulator
-    const simModeToggle = document.getElementById("sim-mode-toggle");
-    simModeToggle.checked = true; // Auto-checked by default in this implementation
+    // Initial UI Setup
     updateToioUIState();
+
+    // --- Synchronization Loop ---
+    // Periodically sync physical cube to simulator position if delta is large
+    setInterval(() => {
+        if (!toioBle.isConnected || toioBle.isMoving || toioSim.isMoving) return;
+
+        const target = toioSim.simToMat(toioSim.x, toioSim.y);
+        
+        const dx = Math.abs(toioBle.x - target.x);
+        const dy = Math.abs(toioBle.y - target.y);
+        const da = Math.abs(toioBle.angle - toioSim.angle) % 360;
+        const diffA = Math.min(da, 360 - da);
+
+        // Thresholds: 20 units (~2.6mm?) or 15 degrees
+        if (dx > 20 || dy > 20 || diffA > 15) {
+            console.log(`[Sync] Correcting BLE position -> (${target.x}, ${target.y}, ${toioSim.angle})`);
+            toioBle.moveTo(target.x, target.y, toioSim.angle);
+        }
+    }, 200);
 
     // --- Event Listeners ---
 
-    // Sim Mode Toggle
-    simModeToggle.addEventListener('change', () => {
-        if (simModeToggle.checked) {
-            activeToio = toioSim;
-            addMessage("system", "シミュレーターモードに切り替えました。");
-        } else {
-            activeToio = toioBle;
-            addMessage("system", "Bluetoothモードに切り替えました。接続ボタンを押してください。");
-        }
-        executor.toio = activeToio;
-        updateToioUIState();
-    });
-
-    // Toio connection (BLE only)
+    // Toio connection (BLE)
     connectToioBtn.addEventListener('click', async () => {
-        if (activeToio !== toioBle) return;
         try {
             await toioBle.connect();
             updateToioUIState();
@@ -69,10 +111,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     disconnectToioBtn.addEventListener('click', () => {
-        if (activeToio === toioBle) {
-            toioBle.disconnect();
-            updateToioUIState();
-        }
+        toioBle.disconnect();
+        updateToioUIState();
     });
 
     toioBle.onDisconnectCallback = () => {
@@ -130,31 +170,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Functions ---
     function updateToioUIState() {
-        const connected = activeToio.isConnected;
-        const isSim = (activeToio === toioSim);
+        const connected = toioBle.isConnected;
 
-        if (isSim) {
+        if (connected) {
             toioStatusDot.className = "dot connected";
-            toioStatusText.innerText = "Simulator (Active)";
+            toioStatusText.innerText = "Connected (BLE + Sim)";
             cubeInfo.style.display = "block";
-            batteryLevel.innerText = "100%"; // Sim always 100%
             connectToioBtn.disabled = true;
-            disconnectToioBtn.disabled = true;
+            disconnectToioBtn.disabled = false;
         } else {
-            // BLE Mode
-            if (connected) {
-                toioStatusDot.className = "dot connected";
-                toioStatusText.innerText = "Connected (BLE)";
-                cubeInfo.style.display = "block";
-                connectToioBtn.disabled = true;
-                disconnectToioBtn.disabled = false;
-            } else {
-                toioStatusDot.className = "dot disconnected";
-                toioStatusText.innerText = "Disconnected (BLE)";
-                cubeInfo.style.display = "none";
-                connectToioBtn.disabled = false;
-                disconnectToioBtn.disabled = true;
-            }
+            toioStatusDot.className = "dot connected"; // Sim is always connected
+            toioStatusText.innerText = "Simulator Only";
+            cubeInfo.style.display = "block";
+            batteryLevel.innerText = "100%";
+            connectToioBtn.disabled = false;
+            disconnectToioBtn.disabled = true;
         }
     }
 
