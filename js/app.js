@@ -26,21 +26,42 @@ document.addEventListener("DOMContentLoaded", () => {
     const ollamaModelInput = document.getElementById("ollama-model");
 
     // --- State & Instances ---
-    const toio = new ToioBLE();
+    const toioBle = new ToioBLE();
+    const toioSim = new ToioSim();
     let ollama = new OllamaClient();
-    const executor = new ToolExecutor(toio);
+    let activeToio = toioSim; // Default to Simulator for easier testing
     let isProcessingChat = false;
 
     // --- initialization ---
+    const executor = new ToolExecutor(activeToio);
     checkOllamaConnection();
+    
+    // Initial UI Setup for Simulator
+    const simModeToggle = document.getElementById("sim-mode-toggle");
+    simModeToggle.checked = true; // Auto-checked by default in this implementation
+    updateToioUIState();
 
     // --- Event Listeners ---
 
-    // Toio connection
+    // Sim Mode Toggle
+    simModeToggle.addEventListener('change', () => {
+        if (simModeToggle.checked) {
+            activeToio = toioSim;
+            addMessage("system", "シミュレーターモードに切り替えました。");
+        } else {
+            activeToio = toioBle;
+            addMessage("system", "Bluetoothモードに切り替えました。接続ボタンを押してください。");
+        }
+        executor.toio = activeToio;
+        updateToioUIState();
+    });
+
+    // Toio connection (BLE only)
     connectToioBtn.addEventListener('click', async () => {
+        if (activeToio !== toioBle) return;
         try {
-            await toio.connect();
-            updateToioState(true);
+            await toioBle.connect();
+            updateToioUIState();
             addMessage("system", "toioキューブに接続しました！準備完了です。");
         } catch (e) {
             alert("Bluetooth接続に失敗しました: " + e.message);
@@ -48,17 +69,19 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     disconnectToioBtn.addEventListener('click', () => {
-        toio.disconnect();
-        updateToioState(false);
+        if (activeToio === toioBle) {
+            toioBle.disconnect();
+            updateToioUIState();
+        }
     });
 
-    toio.onDisconnectCallback = () => {
-        updateToioState(false);
+    toioBle.onDisconnectCallback = () => {
+        updateToioUIState();
         addMessage("system", "toioキューブが切断されました。");
     };
 
-    toio.onBatteryUpdateCallback = (batt) => {
-        batteryLevel.innerText = `${batt}%`;
+    toioBle.onBatteryUpdateCallback = (batt) => {
+        if (activeToio === toioBle) batteryLevel.innerText = `${batt}%`;
     };
 
     // Chat
@@ -87,38 +110,51 @@ document.addEventListener("DOMContentLoaded", () => {
     // Quick Actions
     document.querySelectorAll('.action-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!toio.isConnected) return alert("toioが接続されていません");
+            if (!activeToio.isConnected) return alert("toioが利用可能ではありません（未接続など）");
             const action = btn.dataset.action;
-            if (action === "move_forward") toio.move(50, 50, 500);
-            if (action === "move_backward") toio.move(-50, -50, 500);
-            if (action === "spin") toio.spin(80, 500);
-            if (action === "stop") toio.stop();
+            if (action === "move_forward") activeToio.move(50, 50, 500);
+            if (action === "move_backward") activeToio.move(-50, -50, 500);
+            if (action === "spin") activeToio.spin(80, 500);
+            if (action === "stop") activeToio.stop();
         });
     });
 
     document.querySelectorAll('.color-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!toio.isConnected) return alert("toioが接続されていません");
+            if (!activeToio.isConnected) return alert("toioが利用可能ではありません");
             const [r, g, b] = btn.dataset.color.split(',').map(Number);
-            toio.setLight(r, g, b, 0); // infinite
+            activeToio.setLight(r, g, b, 0); // infinite
         });
     });
 
 
     // --- Functions ---
-    function updateToioState(connected) {
-        if (connected) {
+    function updateToioUIState() {
+        const connected = activeToio.isConnected;
+        const isSim = (activeToio === toioSim);
+
+        if (isSim) {
             toioStatusDot.className = "dot connected";
-            toioStatusText.innerText = "Connected";
+            toioStatusText.innerText = "Simulator (Active)";
             cubeInfo.style.display = "block";
+            batteryLevel.innerText = "100%"; // Sim always 100%
             connectToioBtn.disabled = true;
-            disconnectToioBtn.disabled = false;
-        } else {
-            toioStatusDot.className = "dot disconnected";
-            toioStatusText.innerText = "Disconnected";
-            cubeInfo.style.display = "none";
-            connectToioBtn.disabled = false;
             disconnectToioBtn.disabled = true;
+        } else {
+            // BLE Mode
+            if (connected) {
+                toioStatusDot.className = "dot connected";
+                toioStatusText.innerText = "Connected (BLE)";
+                cubeInfo.style.display = "block";
+                connectToioBtn.disabled = true;
+                disconnectToioBtn.disabled = false;
+            } else {
+                toioStatusDot.className = "dot disconnected";
+                toioStatusText.innerText = "Disconnected (BLE)";
+                cubeInfo.style.display = "none";
+                connectToioBtn.disabled = false;
+                disconnectToioBtn.disabled = true;
+            }
         }
     }
 

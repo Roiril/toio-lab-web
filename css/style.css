@@ -612,3 +612,26 @@ input:checked + .slider:before {
 .slider.round:before {
     border-radius: 50%;
 }
+
+/* Sim Cube Animations */
+.sim-cube.pulse {
+    animation: cubePulse 0.2s ease-out;
+}
+
+@keyframes cubePulse {
+    0% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.15); }
+    100% { transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Direction indicator on sim cube */
+.sim-cube::after {
+    content: '▲';
+    position: absolute;
+    top: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    color: rgba(255,255,255,0.8);
+    line-height: 1;
+}
