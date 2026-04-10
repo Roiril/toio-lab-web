@@ -8,10 +8,20 @@ Write-Host "toio Lab Web 起動スクリプト" -ForegroundColor Cyan
 # Ollamaのパスを設定 (インストール先)
 $ollamaPath = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
 
-# Ollamaがインストールされているか確認
+# Ollamaのインストールとアップデート確認
 if (-Not (Test-Path $ollamaPath)) {
-    Write-Host "Ollamaが見つかりません。インストールしてください。" -ForegroundColor Red
-    exit 1
+    Write-Host "Ollamaが見つかりません。インストールを開始します（少し時間がかかります）..." -ForegroundColor Yellow
+    winget install Ollama.Ollama --accept-source-agreements --accept-package-agreements | Out-Null
+    Write-Host "Ollamaのインストールが完了しました。" -ForegroundColor Green
+} else {
+    Write-Host "Ollamaのアップデートを確認しています..." -ForegroundColor Cyan
+    $upgradeOutput = winget upgrade Ollama.Ollama --accept-source-agreements --accept-package-agreements 2>&1 | Out-String
+    
+    if ($upgradeOutput -match "見つかりませんでした|No applicable update|No available") {
+        Write-Host "Ollamaは最新バージョンです（アップデートはありません）。" -ForegroundColor Green
+    } else {
+        Write-Host "アップデート処理を実行しました。" -ForegroundColor Green
+    }
 }
 
 # Ollamaが起動しているか確認し、起動していなければバックグラウンドで起動
