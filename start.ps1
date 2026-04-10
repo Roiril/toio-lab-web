@@ -6,11 +6,12 @@ if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]:
 try {
     Write-Host "--- toio Lab Web 起動処理開始 ---" -ForegroundColor Cyan
 
-    # Ollamaのパスを設定 (インストール先)
+    # 設定
     $ollamaPath = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
+    $targetModel = "gemma4:e4b"
 
-    # Ollamaのインストールとアップデート確認
-    Write-Host "[1/3] Ollamaの状態を確認中..." -ForegroundColor Cyan
+    # [1/4] Ollama本体のインストールとアップデート確認
+    Write-Host "[1/4] Ollama本体の状態を確認中..." -ForegroundColor Cyan
     if (-Not (Test-Path $ollamaPath)) {
         Write-Host "Ollamaが見つかりません。wingetを使用してインストールを開始します..." -ForegroundColor Yellow
         winget install Ollama.Ollama --accept-source-agreements --accept-package-agreements
@@ -19,29 +20,40 @@ try {
     } else {
         Write-Host "Ollamaのアップデートを確認しています..." -ForegroundColor Gray
         $upgradeOutput = winget upgrade Ollama.Ollama --accept-source-agreements --accept-package-agreements 2>&1 | Out-String
-        
         if ($upgradeOutput -match "見つかりませんでした|No applicable update|No available") {
-            Write-Host "Ollamaは最新バージョンです。" -ForegroundColor Green
+            Write-Host "Ollama本体は最新バージョンです。" -ForegroundColor Green
         } else {
             Write-Host "アップデート処理を完了しました。" -ForegroundColor Green
         }
     }
 
-    # Ollamaが起動しているか確認
-    Write-Host "[2/3] Ollamaサーバーの起動確認..." -ForegroundColor Cyan
+    # [2/4] Ollamaサーバーの起動確認
+    Write-Host "[2/4] Ollamaサーバーの起動確認..." -ForegroundColor Cyan
     $ollamaProcess = Get-Process -Name "ollama" -ErrorAction SilentlyContinue
     if (-Not $ollamaProcess) {
         Write-Host "Ollamaサーバーを起動しています..." -ForegroundColor Yellow
         $env:OLLAMA_ORIGINS = "*"
         Start-Process -FilePath $ollamaPath -ArgumentList "serve" -WindowStyle Hidden
-        Start-Sleep -Seconds 3
+        Start-Sleep -Seconds 3 # 起動待機
         Write-Host "Ollamaサーバーをバックグラウンドで起動しました。" -ForegroundColor Green
     } else {
         Write-Host "Ollamaサーバーは既に実行中です。" -ForegroundColor Green
     }
 
-    # npx serveでローカルサーバーを起動
-    Write-Host "[3/3] Webサーバー(npx serve)を起動中..." -ForegroundColor Cyan
+    # [3/4] AIモデルの確認とダウンロード
+    Write-Host "[3/4] AIモデル ($targetModel) の確認中..." -ForegroundColor Cyan
+    $models = & $ollamaPath list | Out-String
+    if ($models -notmatch $targetModel) {
+        Write-Host "モデル '$targetModel' が見つかりません。ダウンロードを開始します（数分かかる場合があります）..." -ForegroundColor Yellow
+        & $ollamaPath pull $targetModel
+        if ($LASTEXITCODE -ne 0) { throw "モデルのダウンロードに失敗しました。" }
+        Write-Host "モデルの準備が完了しました。" -ForegroundColor Green
+    } else {
+        Write-Host "モデル '$targetModel' は準備済みです。" -ForegroundColor Green
+    }
+
+    # [4/4] npx serveでローカルサーバーを起動
+    Write-Host "[4/4] Webサーバー(npx serve)を起動中..." -ForegroundColor Cyan
     if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
         throw "npx コマンドが見つかりません。Node.jsがインストールされているか確認してください。"
     }
