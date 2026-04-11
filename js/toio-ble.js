@@ -35,6 +35,7 @@ class ToioBLE {
         this.onBatteryUpdateCallback = null;
         this.onButtonUpdateCallback = null;
         this.onIdUpdateCallback = null;
+        this._pendingMove = null;
     }
 
     get isConnected() {
@@ -72,9 +73,11 @@ class ToioBLE {
             await this.characteristics.id.startNotifications();
             this.characteristics.id.addEventListener('characteristicvaluechanged', this._handleIdUpdate.bind(this));
 
+            await this.characteristics.motor.startNotifications();
+            this.characteristics.motor.addEventListener('characteristicvaluechanged', this._handleMotorUpdate.bind(this));
+
             await this.characteristics.battery.startNotifications();
             this.characteristics.battery.addEventListener('characteristicvaluechanged', this._handleBatteryUpdate.bind(this));
-
 
             await this.characteristics.button.startNotifications();
             this.characteristics.button.addEventListener('characteristicvaluechanged', this._handleButtonUpdate.bind(this));
@@ -118,6 +121,7 @@ class ToioBLE {
             battery: null,
             button: null
         };
+        this._pendingMove = null;
     }
 
     // --- Private Handlers ---
@@ -137,6 +141,25 @@ class ToioBLE {
             }
         } catch (e) {
             console.warn("ID update parse error:", e);
+        }
+    }
+
+    _handleMotorUpdate(event) {
+        try {
+            const dv = event.target.value;
+            const type = dv.getUint8(0);
+            if (type === 0x83) { // Targeted move response
+                // [0x83, ControlID, Result]
+                const result = dv.getUint8(2);
+                console.log(`[toio] Motor move response: 0x${result.toString(16).padStart(2, '0')}`);
+                
+                if (this._pendingMove) {
+                    this._pendingMove.resolve(result);
+                    this._pendingMove = null;
+                }
+            }
+        } catch (e) {
+            console.warn("Motor update parse error:", e);
         }
     }
 
@@ -219,11 +242,11 @@ class ToioBLE {
      * @param {number} x Mat coordinate X
      * @param {number} y Mat coordinate Y
      * @param {number} angle Angle 0-360
+     * @returns {Promise<number>} Result code from toio (0x00 = success)
      */
     async moveTo(x, y, angle = 0) {
-        if (!this.isConnected) return;
+        if (!this.isConnected) return 0xFF;
 
-        this.isMoving = true;
         const buf = new Uint8Array(13);
         buf[0] = 0x03; // Targeted move
         buf[1] = 0x00; // Control ID
@@ -238,15 +261,37 @@ class ToioBLE {
         dv.setUint16(9, y, true);
         dv.setUint16(11, angle, true);
 
-        await this.characteristics.motor.writeValueWithoutResponse(buf);
-        
-        // We don't have a reliable way to know when it finishes without looking at ID sensor
-        // but for now let's reset it after a reasonable time or let the sync handle it.
-        // Actually, Targeted Move finishes on its own.
-        // Let's keep isMoving true for a short burst then let ID sensor decide?
-        // No, targeted move can take time.
-        // For simplicity in this sync requirement, we set isMoving = true and 
-        // rely on explicit stop() or next move() to change it.
+        return new Promise((resolve) => {
+            // Safety timeout (15 seconds)
+            const timeout = setTimeout(() => {
+                if (this._pendingMove) {
+                    console.warn("[toio] MoveTo timed out after 15s");
+                    this._pendingMove = null;
+                    this.isMoving = false;
+                    resolve(0x01); // 0x01 = Timeout
+                }
+            }, 15000);
+
+            this._pendingMove = {
+                resolve: (result) => {
+                    clearTimeout(timeout);
+                    this.isMoving = false;
+                    resolve(result);
+                }
+            };
+
+            this.characteristics.motor.writeValueWithoutResponse(buf)
+                .then(() => {
+                    this.isMoving = true;
+                })
+                .catch(err => {
+                    console.error("[toio] moveTo write failed:", err);
+                    clearTimeout(timeout);
+                    this._pendingMove = null;
+                    this.isMoving = false;
+                    resolve(0xFF);
+                });
+        });
     }
 
     // --- Indicator Control ---

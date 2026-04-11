@@ -62,12 +62,25 @@ class ToioSim {
     }
 
     async moveTo(matX, matY, angle = 0) {
+        const currentMat = this.simToMat(this.x, this.y);
+        const dx = matX - currentMat.x;
+        const dy = matY - currentMat.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        // 100 mat units per second, minimum 500ms
+        const delayMs = Math.max(500, (distance / 100) * 1000); 
+
         const simCoord = this.matToSim(matX, matY);
-        this.x = simCoord.x;
-        this.y = simCoord.y;
-        this.angle = angle;
-        this._render();
-        return Promise.resolve();
+        
+        return new Promise(resolve => {
+            setTimeout(() => {
+                this.x = simCoord.x;
+                this.y = simCoord.y;
+                this.angle = angle;
+                this._render();
+                resolve(0x00); // 0x00: Success (toio code)
+            }, delayMs);
+        });
     }
 
     // --- Coordinate Mapping ---

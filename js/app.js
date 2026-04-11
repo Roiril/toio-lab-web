@@ -284,6 +284,16 @@ document.addEventListener("DOMContentLoaded", () => {
                     `;
                 }
                 break;
+            case 'planned':
+                let tasksHtml = `<div class="task-list-container">`;
+                if (step.plan.reasoning) {
+                    tasksHtml += `<div class="plan-reasoning">📋 ${escapeHTML(step.plan.reasoning)}</div>`;
+                }
+                tasksHtml += `<ul class="plan-tasks">`;
+                tasksHtml += step.plan.tasks.map(t => `<li><span class="task-bullet"></span> ${escapeHTML(t.description)}</li>`).join("");
+                tasksHtml += `</ul></div>`;
+                renderSystemMessage(tasksHtml, "Plan Established", false);
+                break;
             case 'acting':
                 if (step.content) {
                     addMessage("ai", step.content);

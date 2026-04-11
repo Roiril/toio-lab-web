@@ -612,3 +612,45 @@ button:disabled {
     text-align: left;
     text-transform: uppercase;
 }
+
+/* Task List Styles */
+.task-list-container {
+    margin-top: 8px;
+    text-align: left;
+}
+
+.plan-reasoning {
+    font-size: 13px;
+    color: var(--accent-cyan);
+    margin-bottom: 10px;
+    font-style: italic;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+    padding-bottom: 8px;
+    line-height: 1.4;
+}
+
+.plan-tasks {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.plan-tasks li {
+    font-size: 14px;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    line-height: 1.4;
+}
+
+.task-bullet {
+    display: inline-block;
+    min-width: 6px;
+    height: 6px;
+    background: var(--accent-cyan);
+    border-radius: 50%;
+    margin-top: 7px;
+    box-shadow: 0 0 5px var(--accent-cyan);
+}

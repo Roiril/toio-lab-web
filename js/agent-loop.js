@@ -18,36 +18,45 @@ class AgentLoop {
 
     async run(userMessage, tools) {
         this.isCancelled = false;
-        let iteration = 0;
+        let totalIteration = 0;
         let finalMessage = "";
         const steps = [];
 
         try {
-            // --- Phase 1: Target Coordinator (目標決定) ---
-            this.onStep({ type: 'thinking', iteration, message: "目的地の座標を計算中..." });
+            // --- Phase 1: Planner (計画作成) ---
+            this.onStep({ type: 'thinking', iteration: totalIteration, message: "行動計画を立案中..." });
             
             const staticContext = this.spatial.getStaticGuide();
             const currentEnv = this.env.describe();
-            const coordinatorSystemPrompt = [
-                `あなたは toio キューブの移動目標（座標）を決定するコーディネーターです。`,
-                `ユーザーの指示と現在の状況から、次に移動すべき最適なマット座標(x,y)を決定してください。`,
+            const plannerSystemPrompt = [
+                `あなたは toio キューブの行動計画を立案するプランナーです。`,
+                `ユーザーの指示を達成するために必要なステップを分解し、タスクリストを作成してください。`,
+                ``,
+                `## タスクリストのルール`,
+                `- 各タスクは具体的で、評価可能な内容にしてください。`,
+                `- 移動が必要な場合は、移動先の座標 (x, y) と、**到着した直後に行うアクション（LED点灯、音、回転等）を1つのタスクにまとめて**記述してください。`,
+                `- 可能な限り \`move_to\` ツールを使用し、目的地と最終的な向き (angle) を1回の手順で達成する計画を立ててください。`,
+                `- 「移動」と「移動後に行う指示」を別々のタスクに分けないでください。`,
+                `- JSON形式で出力してください。`,
                 ``,
                 `## 出力形式`,
-                `必ず以下のJSON形式のみを出力してください。余計な解説は不要です。`,
+                `必ず以下のJSON形式のみを出力してください。`,
                 `{`,
-                `  "target_x": 数値 (250-750),`,
-                `  "target_y": 数値 (250-750),`,
-                `  "target_angle": 数値 (0-360, 指定がなければ0),`,
-                `  "reasoning": "なぜその座標を選んだかの簡潔な理由"`,
+                `  "tasks": [`,
+                `    { "task_id": 1, "description": "座標(x, y)へ移動し(向きangle)、LEDを赤色にする" },`,
+                `    ...`,
+                `  ],`,
+                `  "reasoning": "計画全体の考え方"`,
                 `}`,
                 ``,
+                `## フィジカル環境情報`,
                 staticContext
             ].join('\n');
 
             this.ollama.resetHistory();
-            this.ollama.setSystemPrompt(coordinatorSystemPrompt);
+            this.ollama.setSystemPrompt(plannerSystemPrompt);
             
-            const coordinatorRequest = [
+            const plannerRequest = [
                 `[現在の環境状態]`,
                 currentEnv,
                 ``,
@@ -55,139 +64,180 @@ class AgentLoop {
                 userMessage
             ].join('\n');
 
-            const coordinatorResponse = await this.ollama.chat(coordinatorRequest, [], { jsonMode: true });
-            let target;
+            const plannerResult = await this.ollama.chat(plannerRequest, [], { jsonMode: true });
+            let plan;
             try {
-                target = JSON.parse(coordinatorResponse.content);
+                plan = JSON.parse(plannerResult.content);
             } catch (e) {
-                console.error("Failed to parse coordinator response:", coordinatorResponse.content);
-                throw new Error("コーディネーターの応答パースに失敗しました。");
+                console.error("Failed to parse planner response:", plannerResult.content);
+                throw new Error("プランナーの応答パースに失敗しました。");
+            }
+
+            if (!plan.tasks || plan.tasks.length === 0) {
+                this.onStep({ type: 'done', iteration: totalIteration, content: "実行すべきタスクが見つかりませんでした。" });
+                return { steps, finalMessage: "タスクなし", iterationCount: totalIteration };
             }
 
             this.onStep({ 
                 type: 'thinking', 
-                iteration, 
-                message: `目標決定: (${target.target_x}, ${target.target_y}) - ${target.reasoning}` 
+                iteration: totalIteration, 
+                message: `計画完了: ${plan.tasks.length}個のタスクを生成しました。` 
             });
 
-            const maxRefinementLoops = 3;
-            let refinementCount = 0;
-            let reachedGoal = false;
+            this.onStep({
+                type: 'planned',
+                plan: plan
+            });
 
-            while (!reachedGoal && refinementCount < maxRefinementLoops && !this.isCancelled) {
-                // --- Phase 2: Execution Planner (実行計画) ---
-                this.onStep({ type: 'thinking', iteration, message: "移動コマンドを作成中..." });
+            // タスクごとに実行
+            for (let i = 0; i < plan.tasks.length; i++) {
+                if (this.isCancelled) break;
                 
-                const plannerSystemPrompt = [
-                    `あなたは toio キューブの移動を実行するプランナーです。`,
-                    `提示された目標座標に到達するために \`move_to\` ツールを使用してください。`,
-                    `1回のツール呼び出しで目標に到達することを目指してください。`,
-                    ``,
-                    `## 行動ルール`,
-                    `- 目標座標 (x, y) が与えられるので、\`move_to\` を呼び出してください。`,
-                    `- 余計な挨拶は控え、ツール呼び出しを優先してください。`
-                ].join('\n');
+                const currentTask = plan.tasks[i];
+                let taskIteration = 0;
+                let taskReached = false;
+                const maxTaskRetries = 3; // 1タスクあたりの最大試行回数
 
+                this.onStep({ 
+                    type: 'thinking', 
+                    iteration: totalIteration, 
+                    message: `タスク開始 (${i + 1}/${plan.tasks.length}): ${currentTask.description}` 
+                });
+
+                // タスク開始時に履歴をリセット（再試行ループ内では保持する）
                 this.ollama.resetHistory();
-                this.ollama.setSystemPrompt(plannerSystemPrompt);
 
-                const plannerRequest = [
-                    `現在の位置: ${this.env.describe()}`,
-                    `目標座標: x=${target.target_x}, y=${target.target_y}, angle=${target.target_angle}`
-                ].join('\n');
-
-                const plannerResponse = await this.ollama.chat(plannerRequest, tools);
-                steps.push(plannerResponse);
-
-                if (plannerResponse.tool_calls && plannerResponse.tool_calls.length > 0) {
-                    iteration++;
-                    this.onStep({ 
-                        type: 'acting', 
-                        iteration, 
-                        toolCalls: plannerResponse.tool_calls,
-                        content: plannerResponse.content
-                    });
-
-                    // ツール実行
-                    const results = await this.executor.executeAll(plannerResponse.tool_calls);
-                    if (this.isCancelled) break;
-
-                    // 実行結果を履歴に追加（評価用）
-                    await this.ollama.continueWithToolResults(plannerResponse.tool_calls, results, tools);
-
-                    // --- Phase 3: Evaluator (評価) ---
-                    this.onStep({ type: 'thinking', iteration, message: "到達状況を確認中..." });
-                    
-                    const postActionEnv = this.env.describe();
-                    const evaluatorSystemPrompt = [
-                        `あなたは toio の移動結果を評価するエバリュエーターです。`,
-                        `目標座標と、ツール実行後の現在位置を比較し、目標に十分近い（誤差±10以内程度）かどうかを判定してください。`,
+                while (!taskReached && taskIteration < maxTaskRetries && !this.isCancelled) {
+                    // --- Phase 2: Generator (行動生成) ---
+                    const generatorSystemPrompt = [
+                        `あなたは toio キューブを操作するジェネレーターです。`,
+                        `提示された「現在のタスク」を達成するために、適切なツールを呼び出してください。`,
                         ``,
-                        `## 出力形式`,
-                        `必ず以下のJSON形式のみを出力してください。`,
-                        `{`,
-                        `  "success": boolean,`,
-                        `  "distance": 数値 (目標との距離),`,
-                        `  "reasoning": "なぜそのように判定したか"`,
-                        `}`
+                        `## コンテキスト`,
+                        `- 全体の計画: ${JSON.stringify(plan.tasks)}`,
+                        `- 現在のタスク: ${currentTask.description}`,
+                        ``,
+                        `## 行動ルール`,
+                        `- 1回の手順ですべてのツール（移動 ＋ アクション）を呼び出し、タスクを完了させてください。`,
+                        `- 座標への移動には \`move_to\` を優先的に使用してください。これは目的地の向き (angle) も指定可能です。`,
+                        `- \`move_to\` ツールは目的地に到着するまで完了を待機（同期実行）します。到着後に次のツールが実行されるため、安全に連続実行できます。`,
+                        `- 余計な説明は省き、ツール呼び出しを優先してください。`,
+                        `- 以前の試行で失敗している場合は、履歴にあるフィードバックを元に微調整してください。`
                     ].join('\n');
 
-                    this.ollama.resetHistory();
-                    this.ollama.setSystemPrompt(evaluatorSystemPrompt);
+                    this.ollama.setSystemPrompt(generatorSystemPrompt);
 
-                    const evaluatorRequest = [
-                        `目標: x=${target.target_x}, y=${target.target_y}`,
-                        `実行後の状態: ${postActionEnv}`
+                    const generatorRequest = [
+                        `[状況] 現在の位置/状態: ${this.env.describe()}`,
+                        `[現在取り組むべきタスク]: ${currentTask.description}`,
+                        taskIteration > 0 ? `⚠️ 注意: これは再試行 (${taskIteration + 1}回目) です。前回の失敗を踏まえて修正してください。` : ""
                     ].join('\n');
 
-                    const evaluatorResponse = await this.ollama.chat(evaluatorRequest, [], { jsonMode: true });
-                    let evaluation;
-                    try {
-                        evaluation = JSON.parse(evaluatorResponse.content);
-                    } catch (e) {
-                        evaluation = { success: true }; // パース失敗時はとりあえず終了
-                    }
+                    const generatorResponse = await this.ollama.chat(generatorRequest, tools);
+                    steps.push(generatorResponse);
 
-                    if (evaluation.success) {
-                        reachedGoal = true;
-                        finalMessage = `目標位置 (${target.target_x}, ${target.target_y}) に到達しました。${target.reasoning}`;
-                    } else {
-                        refinementCount++;
+                    if (generatorResponse.tool_calls && generatorResponse.tool_calls.length > 0) {
+                        totalIteration++;
+                        taskIteration++;
+                        
                         this.onStep({ 
-                            type: 'thinking', 
-                            iteration, 
-                            message: `目標未達 (距離: ${Math.round(evaluation.distance)})。再調整を行います (${refinementCount}/${maxRefinementLoops})` 
+                            type: 'acting', 
+                            iteration: totalIteration, 
+                            toolCalls: generatorResponse.tool_calls,
+                            content: generatorResponse.content
                         });
+
+                        // ツール実行
+                        const results = await this.executor.executeAll(generatorResponse.tool_calls);
+                        if (this.isCancelled) break;
+
+                        // 実行結果を履歴に追加（評価用）
+                        await this.ollama.continueWithToolResults(generatorResponse.tool_calls, results, tools);
+
+                        // --- Phase 3: Evaluator (評価) ---
+                        this.onStep({ type: 'thinking', iteration: totalIteration, message: "タスクの達成状況を評価中..." });
+                        
+                        const evaluatorSystemPrompt = [
+                            `あなたは toio の行動結果を判定するエバリュエーターです。`,
+                            `指定されたタスクの内容に対し、実行後の現在の状態と実行ログを見て、適切に完了したか判定してください。`,
+                            ``,
+                            `## 判定のポイント`,
+                            `- 移動を伴うタスクの場合、現在位置が目標に十分近いか（誤差10単位程度は許容）。`,
+                            `- 複数のアクション（LED点灯など）が含まれる場合、それらのツール呼び出しが成功しているか。`,
+                            ``,
+                            `## 出力形式`,
+                            `必ず以下のJSON形式のみを出力してください。`,
+                            `{`,
+                            `  "success": boolean,`,
+                            `  "reasoning": "判定理由（未達成の場合は具体的になぜか、どうすべきか）"`,
+                            `}`
+                        ].join('\n');
+
+                        this.ollama.resetHistory(); // Evaluatorは独立して判定
+                        this.ollama.setSystemPrompt(evaluatorSystemPrompt);
+
+                        const evaluatorRequest = [
+                            `[判定対象のタスク]: ${currentTask.description}`,
+                            `[実行ログ]: ${JSON.stringify(generatorResponse.tool_calls.map((c, idx) => ({ tool: c.function.name, result: results[idx] })))}`,
+                            `[現在の状態]: ${this.env.describe()}`
+                        ].join('\n');
+
+                        const evaluatorResponse = await this.ollama.chat(evaluatorRequest, [], { jsonMode: true });
+                        let evaluation;
+                        try {
+                            evaluation = JSON.parse(evaluatorResponse.content);
+                        } catch (e) {
+                            evaluation = { success: true, reasoning: "パース失敗のため成功とみなします" };
+                        }
+
+                        if (evaluation.success) {
+                            taskReached = true;
+                            this.onStep({ 
+                                type: 'thinking', 
+                                iteration: totalIteration, 
+                                message: `タスク完了: ${currentTask.description}` 
+                            });
+                        } else {
+                            this.onStep({ 
+                                type: 'thinking', 
+                                iteration: totalIteration, 
+                                message: `タスク未達: ${evaluation.reasoning}。再試行します (${taskIteration}/${maxTaskRetries})` 
+                            });
+                        }
+                    } else {
+                        // ツール呼び出しがない場合
+                        taskReached = true;
+                        this.onStep({ type: 'thinking', iteration: totalIteration, message: "ツール呼び出しなしのため、タスク完了とみなします。" });
                     }
-                } else {
-                    // ツール呼び出しがなかった場合
-                    reachedGoal = true;
-                    finalMessage = plannerResponse.content;
+                }
+
+                if (taskIteration >= maxTaskRetries && !taskReached) {
+                    this.onStep({ 
+                        type: 'thinking', 
+                        iteration: totalIteration, 
+                        message: `警告: タスク "${currentTask.description}" は最大試行回数に達しましたが、未完了の可能性があります。` 
+                    });
                 }
             }
 
-            if (this.isCancelled) {
-                finalMessage = "ユーザーによってキャンセルされました。";
-            } else if (refinementCount >= maxRefinementLoops) {
-                finalMessage = `目標付近まで移動を繰り返しましたが、完全に一致させることはできませんでした（最後の理由: ${target.reasoning}）。`;
-            }
+            finalMessage = this.isCancelled ? "キャンセルされました。" : "全てのタスクを終了しました。";
 
             // メモリ保存
-            const summary = `ユーザー: "${userMessage}" / 目標: (${target.target_x}, ${target.target_y}) / 結果: ${finalMessage}`;
+            const summary = `ユーザー: "${userMessage}" / 実行した計画: ${plan.reasoning} / 結果: ${finalMessage}`;
             this.memory.addSummary(summary);
 
-            this.onStep({ type: 'done', iteration, content: finalMessage });
+            this.onStep({ type: 'done', iteration: totalIteration, content: finalMessage });
 
             return {
                 steps,
                 finalMessage,
-                iterationCount: iteration,
+                iterationCount: totalIteration,
                 cancelled: this.isCancelled
             };
 
         } catch (error) {
             console.error("AgentLoop error:", error);
-            this.onStep({ type: 'error', iteration, error: error.message });
+            this.onStep({ type: 'error', iteration: totalIteration, error: error.message });
             throw error;
         }
     }
