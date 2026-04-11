@@ -328,8 +328,9 @@ button:disabled {
 }
 
 .message.system {
-    align-self: center;
-    max-width: 90%;
+    align-self: flex-start;
+    max-width: 95%;
+    width: 100%;
 }
 
 .message-content {
@@ -352,22 +353,28 @@ button:disabled {
 }
 
 .message.system .message-content {
-    background: var(--message-system-bg);
+    background: rgba(255, 255, 255, 0.03);
+    border-left: 3px solid rgba(255, 255, 255, 0.2);
     color: var(--text-secondary);
-    font-size: 13px;
-    text-align: center;
-    border-radius: 8px;
+    font-size: 14px;
+    text-align: left;
+    border-radius: 4px 12px 12px 4px;
+    width: 100%;
+    font-family: var(--font-mono);
 }
 
 .tool-call-block {
-    margin-top: 8px;
-    padding: 8px 12px;
-    background: rgba(0,0,0,0.3);
-    border-radius: 6px;
+    margin-top: 10px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 8px;
     font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--accent-green);
-    border-left: 2px solid var(--accent-green);
+    font-size: 13px;
+    color: var(--accent-cyan);
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
 }
 
 @keyframes fadeIn {
@@ -606,11 +613,16 @@ button:disabled {
 }
 
 .step-header {
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
+    font-size: 10px;
+    color: var(--accent-cyan);
+    opacity: 0.8;
+    margin-bottom: 6px;
     text-align: left;
     text-transform: uppercase;
+    letter-spacing: 1px;
+    font-weight: bold;
+    border-bottom: 1px solid rgba(0, 212, 255, 0.1);
+    padding-bottom: 2px;
 }
 
 /* Task List Styles */

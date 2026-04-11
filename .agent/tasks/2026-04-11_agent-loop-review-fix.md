@@ -1,0 +1,10 @@
+- [ ] `OllamaClient` の拡張 (`addToolResults`, `sendMessages`)
+- [ ] `ToioCombined` クラスの作成 (`js/toio-combined.js`)
+- [ ] `AgentLoop` のバグ修正とリファクタリング
+    - [ ] `getStaticGuide` の呼び出し修正
+    - [ ] `maxIterations` デフォルトを 10 に変更
+    - [ ] `onStep` フェーズとデータ構造の標準化
+- [ ] `ToioSim` の物理挙動調整 (ガイドとの整合性)
+- [ ] `app.js` の更新 (ToioCombined への移行)
+- [ ] `index.html` の更新 (Scriptタグ追加)
+- [ ] 最終動作確認

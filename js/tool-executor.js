@@ -89,8 +89,25 @@ class ToolExecutor {
                         break;
                         
                     case "move_to":
-                        await this.toio.moveTo(args.x, args.y, args.angle || 0);
-                        resultData = { status: "success", desc: `Moving to (${args.x}, ${args.y}) with angle ${args.angle || 0}` };
+                        // 安全範囲に制限（クランプ）
+                        const safePos = this.env.spatial.clampToSafeRange(args.x, args.y);
+                        const isClamped = (safePos.x !== args.x || safePos.y !== args.y);
+                        if (isClamped) {
+                            console.log(`Clamping move_to from (${args.x}, ${args.y}) to safe position (${safePos.x}, ${safePos.y})`);
+                        }
+                        await this.toio.moveTo(safePos.x, safePos.y, args.angle || 0);
+                        
+                        let desc = `Moving to (${safePos.x}, ${safePos.y}) with angle ${args.angle || 0}`;
+                        if (isClamped) {
+                            desc += `. ⚠️注意: 指定された座標 (${args.x}, ${args.y}) はマットの安全範囲外だったため、最も近い安全な位置 (${safePos.x}, ${safePos.y}) に制限されました。これ以上端には移動できません。`;
+                        }
+
+                        resultData = { 
+                            status: "success", 
+                            desc: desc,
+                            original_request: { x: args.x, y: args.y },
+                            clamped: isClamped
+                        };
                         break;
 
                     default:

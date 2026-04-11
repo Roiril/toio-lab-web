@@ -157,8 +157,8 @@ class ToioSim {
         if (this.isMoving) {
             // Simplified differential drive model
             // Constants to map "speed 0-100" to "pixels/sec"
-            const linearScale = 1.0; 
-            const angularScale = 0.5;
+            const linearScale = 0.45; 
+            const angularScale = 0.32;
 
             const vL = this.leftSpeed * linearScale;
             const vR = this.rightSpeed * linearScale;

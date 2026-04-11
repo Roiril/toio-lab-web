@@ -12,6 +12,8 @@ class SpatialAwareness {
             unitToMm: { x: 1.35, y: 1.35 },
             // マットの中心座標
             center: { x: 250, y: 250 },
+            // 安全な移動範囲のマージン（キューブの幅の半分強 = 約20単位）
+            safeMargin: 20,
         };
 
         // === キューブ仕様 ===
@@ -44,6 +46,19 @@ class SpatialAwareness {
         };
     }
 
+    /**
+     * 指定された座標をマットの安全な範囲（端からマージンを持たせた範囲）にクランプ（制限）します。
+     * @param {number} x 指定されたX座標
+     * @param {number} y 指定されたY座標
+     * @returns {{x: number, y: number}} 安全な座標
+     */
+    clampToSafeRange(x, y) {
+        const margin = this.mat.safeMargin;
+        const safeX = Math.max(this.mat.coordRange.x.min + margin, Math.min(this.mat.coordRange.x.max - margin, x));
+        const safeY = Math.max(this.mat.coordRange.y.min + margin, Math.min(this.mat.coordRange.y.max - margin, y));
+        return { x: safeX, y: safeY };
+    }
+
     coordToMm(coordUnits) {
         return Math.round(coordUnits * this.mat.unitToMm.x);
     }
@@ -54,9 +69,14 @@ class SpatialAwareness {
 
     // LLMにシステムプロンプトとして1回だけ注入する静的な空間情報
     getStaticGuide() {
+        const m = this.mat.safeMargin;
+        const range = this.mat.coordRange;
         return [
             `## 空間情報（車両感覚）`,
-            `座標範囲: X(98〜402: 幅304単位), Y(142〜358: 高さ216単位)`,
+            `マット座標範囲: X(${range.x.min}〜${range.x.max}), Y(${range.y.min}〜${range.y.max})`,
+            `移動推奨範囲: X(${range.x.min + m}〜${range.x.max - m}), Y(${range.y.min + m}〜${range.y.max - m})`,
+            `※ Y座標がより小さい方が上（北）、より大きい方が下（南）を表します。`,
+            `※ センサーの読み取り安定のため、周辺${m}単位は「端」とみなし、移動指示は推奨範囲内で行ってください。`,
             `キューブサイズ: 約 24 × 24 単位`,
             ``,
             `## 移動の目安（スピード=50のとき）`,

@@ -32,49 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const toioBle = new ToioBLE();
     const toioSim = new ToioSim();
     
-    // Wrapper to multicast commands to both Sim and BLE
-    const combinedToio = {
-        get isConnected() { return true; }, // Sim is always available
-        async move(l, r, d) {
-            await Promise.all([
-                toioSim.move(l, r, d),
-                toioBle.isConnected ? toioBle.move(l, r, d) : Promise.resolve()
-            ]);
-        },
-        async stop() {
-            await Promise.all([
-                toioSim.stop(),
-                toioBle.isConnected ? toioBle.stop() : Promise.resolve()
-            ]);
-        },
-        async spin(s, d, dir) {
-            await Promise.all([
-                toioSim.spin(s, d, dir),
-                toioBle.isConnected ? toioBle.spin(s, d, dir) : Promise.resolve()
-            ]);
-        },
-        async setLight(r, g, b, d) {
-            await Promise.all([
-                toioSim.setLight(r, g, b, d),
-                toioBle.isConnected ? toioBle.setLight(r, g, b, d) : Promise.resolve()
-            ]);
-        },
-        async playSound(n, d) {
-            await Promise.all([
-                toioSim.playSound(n, d),
-                toioBle.isConnected ? toioBle.playSound(n, d) : Promise.resolve()
-            ]);
-        },
-        async moveTo(x, y, a) {
-            await Promise.all([
-                toioSim.moveTo(x, y, a),
-                toioBle.isConnected ? toioBle.moveTo(x, y, a) : Promise.resolve()
-            ]);
-        },
-        async getBattery() {
-            return toioBle.isConnected ? toioBle.getBattery() : toioSim.getBattery();
-        }
-    };
+    const combinedToio = new ToioCombined(toioSim, toioBle);
 
     let ollama = new OllamaClient();
     const sessionMemory = new SessionMemory();
@@ -246,7 +204,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } finally {
             setChatProcessingState(false);
             if (currentThinkingNode) {
-                currentThinkingNode.remove();
+                currentThinkingNode.classList.remove('thinking');
                 currentThinkingNode = null;
             }
         }
@@ -265,25 +223,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function handleAgentStep(step) {
-        // Remove previous thinking pulse if exists
-        if (currentThinkingNode && step.type !== 'thinking') {
-            currentThinkingNode.remove();
-            currentThinkingNode = null;
-        }
-
         const stepContextText = `step ${step.iteration}/${agentLoop.maxIterations}`;
 
-        switch (step.type) {
-            case 'thinking':
-                if (!currentThinkingNode) {
+        // Handle thinking node transitions
+        if (step.type === 'thinking') {
+            if (currentThinkingNode) {
+                const currentText = currentThinkingNode.querySelector('.message-content').innerText;
+                // If message changed significantly, finalize old one and start new
+                if (!currentText.includes(step.message)) {
+                    currentThinkingNode.classList.remove('thinking');
                     currentThinkingNode = renderSystemMessage(`🤔 ${step.message}`, stepContextText, true);
                 } else {
+                    // Update in place if it's the same base message
                     currentThinkingNode.querySelector('.message-content').innerHTML = `
                         <div class="step-header">${stepContextText}</div>
                         🤔 ${step.message}
                     `;
                 }
-                break;
+            } else {
+                currentThinkingNode = renderSystemMessage(`🤔 ${step.message}`, stepContextText, true);
+            }
+            scrollChat();
+            return;
+        }
+
+        // For non-thinking types, finalize any active thinking node
+        if (currentThinkingNode) {
+            currentThinkingNode.classList.remove('thinking');
+            currentThinkingNode = null;
+        }
+
+        switch (step.type) {
             case 'planned':
                 let tasksHtml = `<div class="task-list-container">`;
                 if (step.plan.reasoning) {

@@ -43,7 +43,7 @@ class OllamaClient {
         }
     }
 
-    async _sendRequest(tools, options = {}) {
+    async sendMessages(tools, options = {}) {
         this.abortController = new AbortController();
         const payload = {
             model: this.model,
@@ -91,10 +91,10 @@ class OllamaClient {
 
     async chat(userText, tools, options = {}) {
         this.chatHistory.push({ role: "user", content: userText });
-        return this._sendRequest(tools, options);
+        return this.sendMessages(tools, options);
     }
 
-    async continueWithToolResults(toolCalls, results, tools) {
+    addToolResults(toolCalls, results) {
         for(let i=0; i < toolCalls.length; i++) {
             this.chatHistory.push({
                 role: "tool",
@@ -102,6 +102,10 @@ class OllamaClient {
                 name: toolCalls[i].function.name
             });
         }
-        return this._sendRequest(tools);
+    }
+
+    async continueWithToolResults(toolCalls, results, tools) {
+        this.addToolResults(toolCalls, results);
+        return this.sendMessages(tools);
     }
 }

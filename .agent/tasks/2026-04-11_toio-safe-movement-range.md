@@ -1,0 +1,3 @@
+- `[ ]` `spatial-awareness.js`に `safeMargin` と `clampToSafeRange` を実装
+- `[ ]` `spatial-awareness.js` の `getStaticGuide` の説明を安全範囲に更新
+- `[ ]` `tool-executor.js` の `move_to` 実行時に `clampToSafeRange` による座標制限を適用
