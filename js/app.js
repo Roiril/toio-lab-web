@@ -65,6 +65,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 toioBle.isConnected ? toioBle.playSound(n, d) : Promise.resolve()
             ]);
         },
+        async moveTo(x, y, a) {
+            await Promise.all([
+                toioSim.moveTo(x, y, a),
+                toioBle.isConnected ? toioBle.moveTo(x, y, a) : Promise.resolve()
+            ]);
+        },
         async getBattery() {
             return toioBle.isConnected ? toioBle.getBattery() : toioSim.getBattery();
         }

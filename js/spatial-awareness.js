@@ -56,14 +56,14 @@ class SpatialAwareness {
     getStaticGuide() {
         return [
             `## 空間情報（車両感覚）`,
-            `マットサイズ: 約41cm × 29cm`,
-            `キューブサイズ: 3.2cm × 3.2cm（マット幅の約7.8%）`,
+            `座標範囲: X(98〜402: 幅304単位), Y(142〜358: 高さ216単位)`,
+            `キューブサイズ: 約 24 × 24 単位`,
             ``,
             `## 移動の目安（speed=50の場合）`,
-            `- ちょっと動く: 300ms → 約3.5cm`,
-            `- 普通に進む: 700ms → 約8cm`,
-            `- 大きく進む: 1500ms → 約17cm`,
-            `- 端から端: 約2500ms`,
+            `- ちょっと動く: 300ms → 約 26 単位`,
+            `- 普通に進む: 700ms → 約 59 単位`,
+            `- 大きく進む: 1500ms → 約 126 単位`,
+            `- 端から端: 約 304 単位 (X方向) / 約 216 単位 (Y方向)`,
             ``,
             `## 回転の目安（speed=50の場合）`,
             `- 90度: 約280ms / 180度: 約560ms / 1回転: 約1120ms`
@@ -73,16 +73,10 @@ class SpatialAwareness {
     // LLMに状態として毎ループ注入する動的な空間情報
     getDynamicContext(cubeX, cubeY, cubeAngle) {
         const margins = this.getMargins(cubeX, cubeY);
-        const marginMm = {
-            top: this.coordToMm(margins.top),
-            bottom: this.coordToMm(margins.bottom),
-            left: this.coordToMm(margins.left),
-            right: this.coordToMm(margins.right),
-        };
 
         return [
             `現在位置: (${cubeX}, ${cubeY}), 角度: ${cubeAngle}°`,
-            `端までの余裕: 上${marginMm.top}mm / 下${marginMm.bottom}mm / 左${marginMm.left}mm / 右${marginMm.right}mm`,
+            `端までの余裕: 上${margins.top}単位 / 下${margins.bottom}単位 / 左${margins.left}単位 / 右${margins.right}単位`,
             // 警告を追加（落下防止）
             (margins.top < 30 || margins.bottom < 30 || margins.left < 30 || margins.right < 30) ? `⚠️ 警告: マット端に接近しています。慎重に移動してください。` : ""
         ].filter(Boolean).join('\n');

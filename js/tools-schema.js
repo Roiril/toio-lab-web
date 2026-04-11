@@ -216,5 +216,25 @@ const toioTools = [
           "properties": {}
         }
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "move_to",
+        "description": "Move the toio cube to a specific absolute coordinate (x, y) on the mat. This is the most accurate way to reach a destination.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "x": { "type": "integer", "description": "Target X coordinate on the mat." },
+            "y": { "type": "integer", "description": "Target Y coordinate on the mat." },
+            "angle": { 
+                "type": "integer", 
+                "description": "Target angle in degrees (0-360). Use 0 for any or if not specified.",
+                "default": 0
+            }
+          },
+          "required": ["x", "y"]
+        }
+      }
     }
 ];

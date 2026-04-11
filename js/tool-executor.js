@@ -19,7 +19,7 @@ class ToolExecutor {
 
             try {
                 // Connection checks
-                const needsConnection = ["move_forward", "move_backward", "turn", "spin", "set_light", "play_sound", "get_battery", "stop"];
+                const needsConnection = ["move_forward", "move_backward", "turn", "spin", "set_light", "play_sound", "get_battery", "stop", "move_to"];
                 if (needsConnection.includes(funcName) && !this.toio.isConnected) {
                     throw new Error("Cube is not connected or simulator is unavailable.");
                 }
@@ -86,6 +86,11 @@ class ToolExecutor {
                     case "get_battery":
                         const batt = await this.toio.getBattery();
                         resultData = { status: "success", battery_percentage: batt };
+                        break;
+                        
+                    case "move_to":
+                        await this.toio.moveTo(args.x, args.y, args.angle || 0);
+                        resultData = { status: "success", desc: `Moving to (${args.x}, ${args.y}) with angle ${args.angle || 0}` };
                         break;
 
                     default:

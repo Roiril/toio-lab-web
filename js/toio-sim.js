@@ -61,6 +61,15 @@ class ToioSim {
         return this.move(s, -s, durationMs);
     }
 
+    async moveTo(matX, matY, angle = 0) {
+        const simCoord = this.matToSim(matX, matY);
+        this.x = simCoord.x;
+        this.y = simCoord.y;
+        this.angle = angle;
+        this._render();
+        return Promise.resolve();
+    }
+
     // --- Coordinate Mapping ---
     // Simple mat area coordinate range: X(98-402), Y(142-358)
     // Sim pixel range: 0-400 (default)

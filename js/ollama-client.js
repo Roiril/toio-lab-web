@@ -43,14 +43,22 @@ class OllamaClient {
         }
     }
 
-    async _sendRequest(tools) {
+    async _sendRequest(tools, options = {}) {
         this.abortController = new AbortController();
         const payload = {
             model: this.model,
             messages: this.chatHistory,
             tools: tools,
-            stream: false
+            stream: false,
+            options: {
+                num_ctx: 32768,
+                ...(options.modelOptions || {})
+            }
         };
+        
+        if (options.jsonMode) {
+            payload.format = "json";
+        }
 
         try {
             const response = await fetch(`${this.baseUrl}/api/chat`, {
@@ -81,9 +89,9 @@ class OllamaClient {
         }
     }
 
-    async chat(userText, tools) {
+    async chat(userText, tools, options = {}) {
         this.chatHistory.push({ role: "user", content: userText });
-        return this._sendRequest(tools);
+        return this._sendRequest(tools, options);
     }
 
     async continueWithToolResults(toolCalls, results, tools) {
