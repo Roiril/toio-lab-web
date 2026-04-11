@@ -16,15 +16,12 @@ try {
         Write-Host "Ollamaが見つかりません。wingetを使用してインストールを開始します..." -ForegroundColor Yellow
         winget install Ollama.Ollama --accept-source-agreements --accept-package-agreements
         if ($LASTEXITCODE -ne 0) { throw "Ollamaのインストールに失敗しました。(ExitCode: $LASTEXITCODE)" }
-        Write-Host "Ollamaのインストールが完了しました。" -ForegroundColor Green
+        Write-Host "[OK] Ollamaのインストールが完了しました。" -ForegroundColor Green
     } else {
-        Write-Host "Ollamaのアップデートを確認しています..." -ForegroundColor Gray
-        $upgradeOutput = winget upgrade Ollama.Ollama --accept-source-agreements --accept-package-agreements 2>&1 | Out-String
-        if ($upgradeOutput -match "見つかりませんでした|No applicable update|No available") {
-            Write-Host "Ollama本体は最新バージョンです。" -ForegroundColor Green
-        } else {
-            Write-Host "アップデート処理を完了しました。" -ForegroundColor Green
-        }
+        Write-Host "Ollamaのアップデートがあるか確認しています (winget)..." -ForegroundColor Gray
+        # 直接実行して進行状況を見せる（Out-Stringでキャプチャしないことでフリーズ感を防ぐ）
+        & winget upgrade Ollama.Ollama --accept-source-agreements --accept-package-agreements
+        Write-Host "[OK] Ollama本体の確認が完了しました。" -ForegroundColor Green
     }
 
     # [2/4] Ollamaサーバーの起動確認
@@ -34,22 +31,26 @@ try {
         Write-Host "Ollamaサーバーを起動しています..." -ForegroundColor Yellow
         $env:OLLAMA_ORIGINS = "*"
         Start-Process -FilePath $ollamaPath -ArgumentList "serve" -WindowStyle Hidden
-        Start-Sleep -Seconds 3 # 起動待機
-        Write-Host "Ollamaサーバーをバックグラウンドで起動しました。" -ForegroundColor Green
+        for ($i=3; $i -gt 0; $i--) {
+             Write-Host ("   起動待機中... あと " + $i + " 秒") -ForegroundColor Gray
+             Start-Sleep -Seconds 1
+        }
+        Write-Host "[OK] Ollamaサーバーをバックグラウンドで起動しました。" -ForegroundColor Green
     } else {
         Write-Host "Ollamaサーバーは既に実行中です。" -ForegroundColor Green
     }
 
     # [3/4] AIモデルの確認とダウンロード
     Write-Host "[3/4] AIモデル ($targetModel) の確認中..." -ForegroundColor Cyan
+    Write-Host "   現在のモデル一覧を取得中..." -ForegroundColor Gray
     $models = & $ollamaPath list | Out-String
     if ($models -notmatch $targetModel) {
-        Write-Host "モデル '$targetModel' が見つかりません。ダウンロードを開始します（数分かかる場合があります）..." -ForegroundColor Yellow
+        Write-Host "   モデル '$targetModel' が見つかりません。ダウンロードを開始します（数分かかる場合があります）..." -ForegroundColor Yellow
         & $ollamaPath pull $targetModel
         if ($LASTEXITCODE -ne 0) { throw "モデルのダウンロードに失敗しました。" }
-        Write-Host "モデルの準備が完了しました。" -ForegroundColor Green
+        Write-Host "[OK] モデルの準備が完了しました。" -ForegroundColor Green
     } else {
-        Write-Host "モデル '$targetModel' は準備済みです。" -ForegroundColor Green
+        Write-Host "[OK] モデル '$targetModel' は準備済みです。" -ForegroundColor Green
     }
 
     # [4/4] npx serveでローカルサーバーを起動
@@ -58,8 +59,11 @@ try {
         throw "npx コマンドが見つかりません。Node.jsがインストールされているか確認してください。"
     }
     
-    Write-Host "ブラウザで http://localhost:3000 にアクセスしてください。" -ForegroundColor Green
-    Write-Host "サーバーを停止するにはこのウィンドウを閉じるか Ctrl+C を入力してください。" -ForegroundColor Gray
+    Write-Host "===============================================" -ForegroundColor Green
+    Write-Host "  起動完了! ブラウザで以下にアクセスしてください:" -ForegroundColor Green
+    Write-Host "  http://localhost:3000" -ForegroundColor White -BackgroundColor DarkCyan
+    Write-Host "===============================================" -ForegroundColor Green
+    Write-Host "`nサーバーを停止するにはこのウィンドウを閉じるか Ctrl+C を入力してください。" -ForegroundColor Gray
     
     npx serve .
 
