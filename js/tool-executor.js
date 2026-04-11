@@ -97,14 +97,23 @@ class ToolExecutor {
                         }
                         await this.toio.moveTo(safePos.x, safePos.y, args.angle || 0);
                         
-                        let desc = `Moving to (${safePos.x}, ${safePos.y}) with angle ${args.angle || 0}`;
+                        // ✅ Get actual position after movement
+                        const afterSnap = this.env.getSnapshot();
+                        const arrivedAt = { 
+                            x: afterSnap.cube.x, 
+                            y: afterSnap.cube.y, 
+                            angle: afterSnap.cube.angle 
+                        };
+
+                        let desc = `Moving to (${safePos.x}, ${safePos.y}) with angle ${args.angle || 0}. Arrived at (${arrivedAt.x}, ${arrivedAt.y}) angle ${arrivedAt.angle}.`;
                         if (isClamped) {
-                            desc += `. ⚠️注意: 指定された座標 (${args.x}, ${args.y}) はマットの安全範囲外だったため、最も近い安全な位置 (${safePos.x}, ${safePos.y}) に制限されました。これ以上端には移動できません。`;
+                            desc += `. ⚠️注意: 指定された座標 (${args.x}, ${args.y}) はマットの安全範囲外だったため、最も近い安全な位置 (${safePos.x}, ${safePos.y}) に制限されました。`;
                         }
 
                         resultData = { 
                             status: "success", 
                             desc: desc,
+                            arrived_at: arrivedAt,
                             original_request: { x: args.x, y: args.y },
                             clamped: isClamped
                         };

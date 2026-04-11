@@ -6,9 +6,9 @@ class ToioSim {
         this.cubeElement = document.getElementById('sim-cube');
         this.matElement = document.getElementById('simulation-mat');
         
-        // Initial state (Mat coordinate system roughly 0-400)
-        this.x = 200;
-        this.y = 200;
+        // Initial state in MAT COORDINATES (X: 45-465, Y: 45-345)
+        this.x = 255;
+        this.y = 195;
         this.angle = 0; // Degrees
         
         this.leftSpeed = 0;
@@ -26,13 +26,9 @@ class ToioSim {
     }
 
     get isConnected() {
-        // Simulator is "always connected" when active
         return true;
     }
 
-    /**
-     * Move with specified speeds and duration
-     */
     async move(leftSpeed, rightSpeed, durationMs = 0) {
         this.leftSpeed = leftSpeed;
         this.rightSpeed = rightSpeed;
@@ -62,51 +58,45 @@ class ToioSim {
     }
 
     async moveTo(matX, matY, angle = 0) {
-        const currentMat = this.simToMat(this.x, this.y);
-        const dx = matX - currentMat.x;
-        const dy = matY - currentMat.y;
+        const dx = matX - this.x;
+        const dy = matY - this.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         
-        // 100 mat units per second, minimum 500ms
+        // Time based on distance
         const delayMs = Math.max(500, (distance / 100) * 1000); 
-
-        const simCoord = this.matToSim(matX, matY);
         
         return new Promise(resolve => {
             setTimeout(() => {
-                this.x = simCoord.x;
-                this.y = simCoord.y;
+                this.x = matX;
+                this.y = matY;
                 this.angle = angle;
                 this._render();
-                resolve(0x00); // 0x00: Success (toio code)
+                resolve(0x00);
             }, delayMs);
         });
     }
 
     // --- Coordinate Mapping ---
-    // Simple mat area coordinate range: X(98-402), Y(142-358)
-    // Sim pixel range: 0-400 (default)
-
     matToSim(matX, matY) {
-        const matMinX = 98, matMaxX = 402;
-        const matMinY = 142, matMaxY = 358;
-        const simW = this.matElement?.clientWidth || 400;
-        const simH = this.matElement?.clientHeight || 400;
+        const matMinX = 45, matMaxX = 465;
+        const matMinY = 45, matMaxY = 345;
+        const simW = this.matElement?.clientWidth || 700;
+        const simH = this.matElement?.clientHeight || 500;
 
-        const x = ((matX - matMinX) / (matMaxX - matMinX)) * simW;
-        const y = ((matY - matMinY) / (matMaxY - matMinY)) * simH;
-        return { x, y };
+        const sx = ((matX - matMinX) / (matMaxX - matMinX)) * simW;
+        const sy = ((matY - matMinY) / (matMaxY - matMinY)) * simH;
+        return { x: sx, y: sy };
     }
 
     simToMat(simX, simY) {
-        const matMinX = 98, matMaxX = 402;
-        const matMinY = 142, matMaxY = 358;
-        const simW = this.matElement?.clientWidth || 400;
-        const simH = this.matElement?.clientHeight || 400;
+        const matMinX = 45, matMaxX = 465;
+        const matMinY = 45, matMaxY = 345;
+        const simW = this.matElement?.clientWidth || 700;
+        const simH = this.matElement?.clientHeight || 500;
 
-        const x = Math.round((simX / simW) * (matMaxX - matMinX) + matMinX);
-        const y = Math.round((simY / simH) * (matMaxY - matMinY) + matMinY);
-        return { x, y };
+        const mx = Math.round((simX / simW) * (matMaxX - matMinX) + matMinX);
+        const my = Math.round((simY / simH) * (matMaxY - matMinY) + matMinY);
+        return { x: mx, y: my };
     }
 
 
@@ -116,20 +106,10 @@ class ToioSim {
             this.cubeElement.style.borderTop = `4px solid ${color}`;
             this.cubeElement.style.boxShadow = `0 0 10px ${color}`;
         }
-        
-        if (durationMs > 0) {
-            return new Promise(resolve => {
-                setTimeout(() => {
-                    // Reset or leave as is? Let's leave for now.
-                    resolve();
-                }, durationMs);
-            });
-        }
+        return Promise.resolve();
     }
 
     async playSound(noteId = 60, durationMs = 500) {
-        console.log(`[Sim] Playing sound: note ${noteId} for ${durationMs}ms`);
-        // Visual feedback for sound? Maybe a little shake or pulse.
         if (this.cubeElement) {
             this.cubeElement.classList.add('pulse');
             setTimeout(() => this.cubeElement.classList.remove('pulse'), 200);
@@ -137,28 +117,22 @@ class ToioSim {
         return new Promise(resolve => setTimeout(resolve, durationMs));
     }
 
-    // --- Info ---
-
     async getBattery() {
         return this.battery;
     }
 
     getPosition() {
-        const matCoord = this.simToMat(this.x, this.y);
-        return { x: matCoord.x, y: matCoord.y, angle: this.angle };
+        return { x: Math.round(this.x), y: Math.round(this.y), angle: Math.round(this.angle) };
     }
 
     // --- Private Simulation Logic ---
-
     _update(time) {
-        const dt = (time - this.lastTime) / 1000; // seconds
+        const dt = (time - this.lastTime) / 1000;
         this.lastTime = time;
 
         if (this.isMoving) {
-            // Simplified differential drive model
-            // Constants to map "speed 0-100" to "pixels/sec"
-            const linearScale = 0.45; 
-            const angularScale = 0.32;
+            const linearScale = 2.0; 
+            const angularScale = 0.5;
 
             const vL = this.leftSpeed * linearScale;
             const vR = this.rightSpeed * linearScale;
@@ -166,21 +140,21 @@ class ToioSim {
             const v = (vL + vR) / 2;
             const omega = (vR - vL) * angularScale;
 
-            // Update angle (degrees)
-            this.angle += omega * dt * 10; // Extra gain for feeling
+            this.angle += omega * dt * 10;
+            const rad = (this.angle - 90) * Math.PI / 180;
             
-            // Convert angle to radians for movement
-            const rad = (this.angle - 90) * Math.PI / 180; // -90 because 0 deg is right in math, but top in our CSS usually
-            
-            this.x += v * Math.cos(rad) * dt * 5;
-            this.y += v * Math.sin(rad) * dt * 5;
+            this.x += v * Math.cos(rad) * dt;
+            this.y += v * Math.sin(rad) * dt;
 
-            // Boundary check
-            const matWidth = this.matElement?.clientWidth || 400;
-            const matHeight = this.matElement?.clientHeight || 400;
-            this.x = Math.max(20, Math.min(matWidth - 20, this.x));
-            this.y = Math.max(20, Math.min(matHeight - 20, this.y));
+            // mat boundary check
+            const matMinX = 98, matMaxX = 402;
+            const matMinY = 142, matMaxY = 358;
+            this.x = Math.max(matMinX, Math.min(matMaxX, this.x));
+            this.y = Math.max(matMinY, Math.min(matMaxY, this.y));
 
+            this._render();
+        } else {
+            // Always render to handle window resizing even when not moving
             this._render();
         }
 
@@ -188,9 +162,10 @@ class ToioSim {
     }
 
     _render() {
-        if (!this.cubeElement) return;
-        this.cubeElement.style.left = `${this.x}px`;
-        this.cubeElement.style.top = `${this.y}px`;
+        if (!this.cubeElement || !this.matElement) return;
+        const simPos = this.matToSim(this.x, this.y);
+        this.cubeElement.style.left = `${simPos.x}px`;
+        this.cubeElement.style.top = `${simPos.y}px`;
         this.cubeElement.style.transform = `translate(-50%, -50%) rotate(${this.angle}deg)`;
     }
 }

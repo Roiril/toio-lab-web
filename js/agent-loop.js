@@ -33,13 +33,23 @@ class AgentLoop {
                 `あなたは toio キューブの動作計画を立てるプランナーです。`,
                 `ユーザーの要望を達成するために、必要な手順（タスク）を列挙してください。`,
                 ``,
+                `## 利用可能なアクション`,
+                `- move_to(x, y, angle): 指定座標・角度へ移動。移動と向き変更を同時に行える。`,
+                `- set_light(red, green, blue): LEDの色を変更。`,
+                `- play_sound(note_id, duration_ms): 音を鳴らす。`,
+                `- spin(direction, duration_ms): その場で回転。`,
+                ``,
                 `## ルール`,
                 `- タスクは具体的かつ実行可能な単位で分割してください。`,
+                `- タスクは最大3つまでに制限してください。少なければ少ないほど良いです。`,
                 `- 各タスクには 'description' を含めてください。`,
+                `- 移動と向き変更は常に1タスクにまとめてください（例: 「(250, 200)に向き180度で移動」）。`,
+                `- LED点灯や音などのアクションが必要な場合は、それもタスクに含めてください（例: 「LEDを赤く点灯してから(200, 300)に移動」）。`,
+                `- description には必ず具体的な座標と角度を含めてください。`,
                 `- 出力は必ず以下のJSON形式のみで行ってください。`,
                 `{`,
                 `  "tasks": [`,
-                `    { "description": "xxxへ移動する" },`,
+                `    { "description": "LEDを赤く点灯し、(250, 200)に向き0度で移動" },`,
                 `    ...`,
                 `  ],`,
                 `  "reasoning": "計画全体の考え方"`,
@@ -83,46 +93,58 @@ class AgentLoop {
 
             // タスク実行ループ
             for (const currentTask of plan.tasks) {
-                if (this.isCancelled) break;
+                if (this.isCancelled || totalIteration >= this.maxIterations) break;
 
                 let taskReached = false;
                 let taskIteration = 0;
                 const maxTaskRetries = 3;
                 let lastExecutionFeedback = "";
 
-                while (!taskReached && taskIteration < maxTaskRetries && !this.isCancelled) {
+                while (!taskReached && taskIteration < maxTaskRetries && !this.isCancelled && totalIteration < this.maxIterations) {
                     // --- Phase 2: Generator (行動生成) ---
                     const generatorSystemPrompt = [
                         `あなたは toio キューブを操作するジェネレーターです。`,
-                        `提示された「現在のタスク」を達成するために、適切なツールを呼び出してください。`,
+                        `提示された「現在のタスク」を達成するためだけに、適切なツールを呼び出してください。`,
                         ``,
-                        `## コンテキスト`,
-                        `- 全体の計画: ${JSON.stringify(plan.tasks)}`,
-                        `- 現在のタスク: ${currentTask.description}`,
+                        `## ルール`,
+                        `- 1タスク = 1回の \`move_to\` 呼び出しで完了させてください。`,
+                        `- \`move_to(x, y, angle)\` は移動と向き変更を同時に行えます。`,
+                        `- 向きだけ変えたい場合は、現在位置の座標をそのまま使い、angle だけ変更してください。`,
+                        `- LED点灯等の追加アクションがある場合のみ、2回目の呼び出しを行ってください。`,
                         ``,
-                        `## 行動ルール`,
-                        `- 1つのタスクを完了させるために、必要なだけ何度でもツールを呼び出してください。`,
-                        `- 移動とアクション（LED点灯など）が必要な場合、通常は \`move_to\` を呼び出した後に、次のステップで \`set_light\` などを呼び出します。`,
-                        `- 座標への移動には \`move_to\` を優先的に使用してください。これには目的地の向き (angle) も指定可能です。`,
-                        `- 以前の試行で解決できなかった問題（マットの端に到達したなど）がある場合は、それを踏まえて行動を変更してください。`
+                        `## 現在のタスク`,
+                        currentTask.description,
+                        ``,
+                        `## フィジカル環境`,
+                        this.spatial.getStaticGuide()
                     ].join('\n');
 
+                    // ✅ ステートレス化: 毎回履歴をリセットして1タスクに集中させる
+                    this.ollama.resetHistory();
                     this.ollama.setSystemPrompt(generatorSystemPrompt);
 
                     const generatorRequest = [
-                        `[状況] 現在の位置/状態: ${this.env.describe()}`,
-                        `[現在取り組むべきタスク]: ${currentTask.description}`,
-                        taskIteration > 0 ? `⚠️ 注意: これは再試行(${taskIteration + 1}回目) です。前回の実行結果: ${lastExecutionFeedback}` : ""
+                        `[現在の環境] ${this.env.describe()}`,
+                        taskIteration > 0 ? `⚠️ 注意: 前回は未達成でした。フィードバック: ${lastExecutionFeedback}` : ""
                     ].join('\n');
 
-                    let currentResponse = await this.ollama.chat(generatorRequest, tools);
+                    // Agent用に制限されたツールのみを渡す
+                    const agentTools = tools.filter(t => 
+                        ["move_to", "get_position", "stop", "set_light", "play_sound", "wait", "get_battery", "spin"].includes(t.function.name)
+                    );
+
+                    let currentResponse = await this.ollama.chat(generatorRequest, agentTools);
                     steps.push(currentResponse);
 
                     let allToolCallsForStep = [];
                     let allResultsForStep = [];
+                    const maxToolCallsPerTask = 3; // 1タスクあたりのツール呼び出し上限
 
-                    // ツール実行ループ (AIがツールを出し続ける限り実行する)
-                    while (currentResponse.tool_calls && currentResponse.tool_calls.length > 0 && !this.isCancelled) {
+                    // ツール実行ループ (上限付き)
+                    while (currentResponse.tool_calls && currentResponse.tool_calls.length > 0 
+                           && !this.isCancelled 
+                           && totalIteration < this.maxIterations
+                           && allToolCallsForStep.length < maxToolCallsPerTask) {
                         const toolCalls = currentResponse.tool_calls;
                         allToolCallsForStep.push(...toolCalls);
                         
@@ -140,9 +162,11 @@ class AgentLoop {
                         allResultsForStep.push(...results);
                         if (this.isCancelled) break;
 
-                        // 継続のために履歴を更新
-                        currentResponse = await this.ollama.continueWithToolResults(toolCalls, results, tools);
-                        steps.push(currentResponse);
+                        // 上限に達していなければ継続
+                        if (allToolCallsForStep.length < maxToolCallsPerTask) {
+                            currentResponse = await this.ollama.continueWithToolResults(toolCalls, results, agentTools);
+                            steps.push(currentResponse);
+                        }
                     }
 
                     taskIteration++;
@@ -166,15 +190,18 @@ class AgentLoop {
                         `あなたは toio の行動結果を判定するエバリュエーターです。`,
                         `指定されたタスクの内容に対し、実行後の現在の状態と実行ログを見て、適切に完了したか判定してください。`,
                         ``,
-                        `## 判定のポイント`,
-                        `- 移動を伴うタスクの場合、現在位置が目標に十分近いか（誤差10単位程度は許容）。`,
-                        `- 複数のアクション（LED点灯など）が含まれる場合、それらのツール呼び出しが成功しているか。`,
+                        `## 判定基準`,
+                        `- 座標: 目標との誤差が±10単位以内なら「到達」と判定する。`,
+                        `- 角度: 目標との誤差が±20度以内なら「達成」と判定する。`,
+                        `- マットの端では安全範囲へのクランプが行われるため、端付近の座標は数単位のズレが正常です。`,
+                        `- LED点灯や音のタスクは、ツール呼び出しが成功していれば「完了」とする。`,
+                        `- 総合的に「十分に近い」「おおむね達成」であれば完了と判定してください。完璧を求めないでください。`,
                         ``,
                         `## 出力形式`,
                         `必ず以下のJSON形式のみを出力してください。`,
                         `{`,
                         `  "success": boolean,`,
-                        `  "reasoning": "判定理由。未達の場合、具体的になぜか、どうすべきか"`,
+                        `  "reasoning": "判定理由"`,
                         `}`
                     ].join('\n');
 

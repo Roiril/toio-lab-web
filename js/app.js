@@ -42,6 +42,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // UI state
     let isProcessingChat = false;
+    let isAgentRunning = false;
     let currentThinkingNode = null;
 
     // Agent Loop initialization
@@ -56,6 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- Synchronization Loop ---
     setInterval(() => {
+        if (isAgentRunning) return; // ✅ Agent実行中は同期を停止して干渉を防ぐ
         if (!toioBle.isConnected || toioBle.isMoving || toioSim.isMoving) return;
 
         const target = toioSim.simToMat(toioSim.x, toioSim.y);
@@ -138,22 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
         checkOllamaConnection();
     });
 
-    document.querySelectorAll('.action-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const action = btn.dataset.action;
-            if (action === "move_forward") combinedToio.move(50, 50, 500);
-            if (action === "move_backward") combinedToio.move(-50, -50, 500);
-            if (action === "spin") combinedToio.spin(80, 500);
-            if (action === "stop") combinedToio.stop();
-        });
-    });
-
-    document.querySelectorAll('.color-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const [r, g, b] = btn.dataset.color.split(',').map(Number);
-            combinedToio.setLight(r, g, b, 0); // infinite
-        });
-    });
+    // Quick Actions were removed from UI
 
 
     // --- Functions ---
@@ -195,6 +182,7 @@ document.addEventListener("DOMContentLoaded", () => {
         chatInput.value = "";
         
         setChatProcessingState(true);
+        isAgentRunning = true;
         addMessage("user", text);
 
         try {
@@ -202,6 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
             addMessage("system", "エラーが発生しました: " + e.message);
         } finally {
+            isAgentRunning = false;
             setChatProcessingState(false);
             if (currentThinkingNode) {
                 currentThinkingNode.classList.remove('thinking');
