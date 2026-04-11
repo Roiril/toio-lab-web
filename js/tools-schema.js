@@ -6,6 +6,64 @@ const toioTools = [
     {
       "type": "function",
       "function": {
+        "name": "think",
+        "description": "Think step-by-step before taking an action. Use this to plan complex sequences or reason about spatial constraints.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "thought": {
+              "type": "string",
+              "description": "Your internal reasoning or plan."
+            }
+          },
+          "required": ["thought"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "get_position",
+        "description": "Get the current position of the toio cube, and spatial layout info (margins to the edge of the mat).",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "wait",
+        "description": "Wait for a specified number of milliseconds before doing nothing.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "duration_ms": {
+              "type": "integer",
+              "description": "Duration to wait in milliseconds.",
+              "minimum": 100,
+              "maximum": 5000
+            }
+          },
+          "required": ["duration_ms"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "stop",
+        "description": "Stop all movement of the toio cube immediately.",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
         "name": "move_forward",
         "description": "Move the toio cube forward. Useful for 'go forward', 'move ahead', 'advance'.",
         "parameters": {

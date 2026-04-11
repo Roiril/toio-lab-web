@@ -115,8 +115,15 @@ class ToioSim {
         return new Promise(resolve => setTimeout(resolve, durationMs));
     }
 
+    // --- Info ---
+
     async getBattery() {
         return this.battery;
+    }
+
+    getPosition() {
+        const matCoord = this.simToMat(this.x, this.y);
+        return { x: matCoord.x, y: matCoord.y, angle: this.angle };
     }
 
     // --- Private Simulation Logic ---

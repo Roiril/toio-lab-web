@@ -1,9 +1,10 @@
 /**
- * Executes requested tool_calls against the ToioBLE instance.
+ * Executes requested tool_calls against the ToioBLE instance and Environment.
  */
 class ToolExecutor {
-    constructor(toioInstance) {
+    constructor(toioInstance, environment) {
         this.toio = toioInstance;
+        this.env = environment; // for get_position
     }
 
     async executeAll(toolCalls) {
@@ -17,11 +18,35 @@ class ToolExecutor {
             let resultData = {};
 
             try {
-                if (!this.toio.isConnected) {
-                    throw new Error("Cube is not connected.");
+                // Connection checks
+                const needsConnection = ["move_forward", "move_backward", "turn", "spin", "set_light", "play_sound", "get_battery", "stop"];
+                if (needsConnection.includes(funcName) && !this.toio.isConnected) {
+                    throw new Error("Cube is not connected or simulator is unavailable.");
                 }
 
                 switch (funcName) {
+                    case "think":
+                        // Purely internal operation, we just echo back that thought was recorded
+                        resultData = { status: "success", thought_recorded: true };
+                        break;
+                        
+                    case "get_position":
+                        if (!this.env) throw new Error("Environment not provided to ToolExecutor");
+                        // Return the environment snapshot, which includes position and spatial info
+                        const snap = this.env.getSnapshot();
+                        resultData = { status: "success", state: snap };
+                        break;
+                        
+                    case "wait":
+                        await new Promise(r => setTimeout(r, args.duration_ms || 1000));
+                        resultData = { status: "success", desc: `Waited for ${args.duration_ms}ms` };
+                        break;
+                        
+                    case "stop":
+                        await this.toio.stop();
+                        resultData = { status: "success", desc: "Stopped all movement" };
+                        break;
+
                     case "move_forward":
                         await this.toio.move(args.speed || 50, args.speed || 50, args.duration_ms);
                         resultData = { status: "success", desc: `Moved forward for ${args.duration_ms}ms` };

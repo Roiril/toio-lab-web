@@ -1,5 +1,5 @@
 /**
- * Main App Logic
+ * Main App Logic integrated with Agent Loop
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const chatHistory = document.getElementById("chat-history");
     const chatInput = document.getElementById("chat-input");
     const sendBtn = document.getElementById("send-btn");
+    const cancelBtn = document.getElementById("cancel-btn");
     
     const ollamaStatusDot = document.getElementById("ollama-status-dot");
     const ollamaStatusText = document.getElementById("ollama-status-text");
@@ -24,6 +25,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveSettingsBtn = document.getElementById("save-settings-btn");
     const ollamaUrlInput = document.getElementById("ollama-url");
     const ollamaModelInput = document.getElementById("ollama-model");
+    const maxIterationsInput = document.getElementById("max-iterations");
+    const clearMemoryBtn = document.getElementById("clear-memory-btn");
 
     // --- State & Instances ---
     const toioBle = new ToioBLE();
@@ -68,18 +71,26 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     let ollama = new OllamaClient();
-    let activeToio = combinedToio; 
+    const sessionMemory = new SessionMemory();
+    const spatialAwareness = new SpatialAwareness();
+    const environment = new Environment(toioSim, toioBle, spatialAwareness);
+    const executor = new ToolExecutor(combinedToio, environment);
+    
+    // UI state
     let isProcessingChat = false;
+    let currentThinkingNode = null;
+
+    // Agent Loop initialization
+    let agentLoop = new AgentLoop(ollama, executor, environment, sessionMemory, spatialAwareness, {
+        maxIterations: parseInt(maxIterationsInput.value, 10),
+        onStep: handleAgentStep
+    });
 
     // --- initialization ---
-    const executor = new ToolExecutor(activeToio);
     checkOllamaConnection();
-    
-    // Initial UI Setup
     updateToioUIState();
 
     // --- Synchronization Loop ---
-    // Periodically sync physical cube to simulator position if delta is large
     setInterval(() => {
         if (!toioBle.isConnected || toioBle.isMoving || toioSim.isMoving) return;
 
@@ -90,16 +101,13 @@ document.addEventListener("DOMContentLoaded", () => {
         const da = Math.abs(toioBle.angle - toioSim.angle) % 360;
         const diffA = Math.min(da, 360 - da);
 
-        // Thresholds: 20 units (~2.6mm?) or 15 degrees
         if (dx > 20 || dy > 20 || diffA > 15) {
-            console.log(`[Sync] Correcting BLE position -> (${target.x}, ${target.y}, ${toioSim.angle})`);
             toioBle.moveTo(target.x, target.y, toioSim.angle);
         }
     }, 200);
 
     // --- Event Listeners ---
 
-    // Toio connection (BLE)
     connectToioBtn.addEventListener('click', async () => {
         try {
             await toioBle.connect();
@@ -121,49 +129,65 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     toioBle.onBatteryUpdateCallback = (batt) => {
-        if (activeToio === toioBle) batteryLevel.innerText = `${batt}%`;
+        batteryLevel.innerText = `${batt}%`;
     };
 
-    // Chat
-    sendBtn.addEventListener('click', handleChatSubmit);
+    sendBtn.addEventListener('click', submitChat);
+    cancelBtn.addEventListener('click', () => {
+        if (agentLoop) {
+            agentLoop.cancel();
+            cancelBtn.disabled = true;
+        }
+    });
+
     chatInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            handleChatSubmit();
+            submitChat();
         }
     });
+
     chatInput.addEventListener('input', () => {
         sendBtn.disabled = chatInput.value.trim().length === 0 || isProcessingChat;
     });
 
-    // Settings
     settingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
     closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
+    
+    clearMemoryBtn.addEventListener('click', () => {
+        sessionMemory.clear();
+        alert("セッション記憶をクリアしました。");
+    });
+
     saveSettingsBtn.addEventListener('click', () => {
         const newUrl = ollamaUrlInput.value.trim();
         const newModel = ollamaModelInput.value.trim();
         ollama = new OllamaClient(newUrl, newModel);
+        
+        // Re-init agent loop
+        agentLoop = new AgentLoop(ollama, executor, environment, sessionMemory, spatialAwareness, {
+            maxIterations: parseInt(maxIterationsInput.value, 10) || 10,
+            onStep: handleAgentStep
+        });
+        
         settingsModal.classList.remove('active');
         checkOllamaConnection();
     });
 
-    // Quick Actions
     document.querySelectorAll('.action-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!activeToio.isConnected) return alert("toioが利用可能ではありません（未接続など）");
             const action = btn.dataset.action;
-            if (action === "move_forward") activeToio.move(50, 50, 500);
-            if (action === "move_backward") activeToio.move(-50, -50, 500);
-            if (action === "spin") activeToio.spin(80, 500);
-            if (action === "stop") activeToio.stop();
+            if (action === "move_forward") combinedToio.move(50, 50, 500);
+            if (action === "move_backward") combinedToio.move(-50, -50, 500);
+            if (action === "spin") combinedToio.spin(80, 500);
+            if (action === "stop") combinedToio.stop();
         });
     });
 
     document.querySelectorAll('.color-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
-            if (!activeToio.isConnected) return alert("toioが利用可能ではありません");
             const [r, g, b] = btn.dataset.color.split(',').map(Number);
-            activeToio.setLight(r, g, b, 0); // infinite
+            combinedToio.setLight(r, g, b, 0); // infinite
         });
     });
 
@@ -200,62 +224,101 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function handleChatSubmit() {
+    async function submitChat() {
         if (isProcessingChat || !chatInput.value.trim()) return;
 
         const text = chatInput.value.trim();
         chatInput.value = "";
-        sendBtn.disabled = true;
-        isProcessingChat = true;
-
+        
+        setChatProcessingState(true);
         addMessage("user", text);
-        scrollChat();
 
         try {
-            // Send to Ollama
-            const responseMsg = await ollama.chat(text, toioTools);
-            processAssistantMessage(responseMsg);
-            
-            // If tools were called
-            if (responseMsg.tool_calls && responseMsg.tool_calls.length > 0) {
-                const results = await executor.executeAll(responseMsg.tool_calls);
-                const followUpMsg = await ollama.submitToolResults(responseMsg.tool_calls, results);
-                processAssistantMessage(followUpMsg);
-            }
-
+            await agentLoop.run(text, toioTools);
         } catch (e) {
             addMessage("system", "エラーが発生しました: " + e.message);
         } finally {
-            isProcessingChat = false;
-            if (chatInput.value.trim().length > 0) sendBtn.disabled = false;
+            setChatProcessingState(false);
+            if (currentThinkingNode) {
+                currentThinkingNode.remove();
+                currentThinkingNode = null;
+            }
         }
     }
 
-    function processAssistantMessage(msg) {
-        if (msg.content) {
-            addMessage("ai", msg.content);
+    function setChatProcessingState(isProcessing) {
+        isProcessingChat = isProcessing;
+        sendBtn.style.display = isProcessing ? 'none' : 'block';
+        cancelBtn.style.display = isProcessing ? 'block' : 'none';
+        cancelBtn.disabled = false;
+        if (!isProcessing && chatInput.value.trim().length > 0) {
+            sendBtn.disabled = false;
+        } else {
+            sendBtn.disabled = true;
         }
-        if (msg.tool_calls && msg.tool_calls.length > 0) {
-            let toolsHtml = msg.tool_calls.map(tc => {
-                return `🔧 <span style="font-weight:bold">${tc.function.name}</span>(${JSON.stringify(tc.function.arguments)})`;
-            }).join("<br>");
-            addRawHtmlMessage("system", `<div class="tool-call-block">${toolsHtml}</div>`);
+    }
+
+    function handleAgentStep(step) {
+        // Remove previous thinking pulse if exists
+        if (currentThinkingNode && step.type !== 'thinking') {
+            currentThinkingNode.remove();
+            currentThinkingNode = null;
+        }
+
+        const stepContextText = `step ${step.iteration}/${agentLoop.maxIterations}`;
+
+        switch (step.type) {
+            case 'thinking':
+                if (!currentThinkingNode) {
+                    currentThinkingNode = renderSystemMessage(`🤔 ${step.message}`, stepContextText, true);
+                } else {
+                    currentThinkingNode.querySelector('.message-content').innerHTML = `
+                        <div class="step-header">${stepContextText}</div>
+                        🤔 ${step.message}
+                    `;
+                }
+                break;
+            case 'acting':
+                if (step.content) {
+                    addMessage("ai", step.content);
+                }
+                let toolsHtml = step.toolCalls.map(tc => {
+                    return `🔧 <span style="font-weight:bold">${tc.function.name}</span>(${JSON.stringify(tc.function.arguments)})`;
+                }).join("<br>");
+                renderSystemMessage(`<div class="tool-call-block">${toolsHtml}</div>`, stepContextText, false);
+                break;
+            case 'done':
+                if (step.content) {
+                    addMessage("ai", step.content);
+                }
+                break;
+            case 'error':
+                renderSystemMessage(`⚠️ エラー発生: ${step.error}`, stepContextText, false);
+                break;
         }
         scrollChat();
+    }
+
+    function renderSystemMessage(htmlContent, headerText, isThinking) {
+        const div = document.createElement("div");
+        div.className = `message system ${isThinking ? 'thinking' : ''}`;
+        
+        let headerHtml = headerText ? `<div class="step-header">${headerText}</div>` : '';
+        
+        div.innerHTML = `<div class="message-content" ${!isThinking && htmlContent.includes('tool-call-block') ? 'style="padding:0; background:transparent; border:none"' : ''}>
+            ${headerHtml}
+            ${htmlContent}
+        </div>`;
+        
+        chatHistory.appendChild(div);
+        scrollChat();
+        return div;
     }
 
     function addMessage(role, text) {
         const div = document.createElement("div");
         div.className = `message ${role}`;
         div.innerHTML = `<div class="message-content">${escapeHTML(text)}</div>`;
-        chatHistory.appendChild(div);
-        scrollChat();
-    }
-
-    function addRawHtmlMessage(role, html) {
-        const div = document.createElement("div");
-        div.className = `message ${role}`;
-        div.innerHTML = `<div class="message-content" style="padding:0; background:transparent; border:none">${html}</div>`;
         chatHistory.appendChild(div);
         scrollChat();
     }

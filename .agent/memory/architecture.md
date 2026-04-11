@@ -13,12 +13,15 @@
 
 ## ファイル構成
 
-```
 toio-lab-web/
 ├── index.html              # エントリポイント
 ├── css/style.css           # Glassmorphism ベースの統一スタイル
 ├── js/
 │   ├── app.js              # UI・状態管理・イベントバインディング
+│   ├── agent-loop.js       # 自律的 Evaluate-Act-Observe ループ ★
+│   ├── environment.js      # キューブと空間の状態統合 ★
+│   ├── spatial-awareness.js # 車両感覚（距離・サイズのメタデータ） ★
+│   ├── session-memory.js   # 長期コンテキスト（会話要約・永続化） ★
 │   ├── ollama-client.js    # Ollama REST API クライアント
 │   ├── toio-ble.js         # Web Bluetooth API ラッパー（物理キューブ）
 │   ├── toio-sim.js         # ブラウザ内シミュレータ（Canvas 2D）
@@ -36,14 +39,28 @@ toio-lab-web/
     ↓
 app.js (UI)
     ↓
-ollama-client.js → Ollama API → Gemma4 (Tool Calling)
-    ↓
-tool-executor.js (ToolCall 解析)
-    ↓
-┌─────────────┐   ┌─────────────┐
-│ toio-ble.js │   │ toio-sim.js │
-│ (物理BLE)   │   │ (シミュレータ)│
-└─────────────┘   └─────────────┘
+┌─────────────────────────────────────────────────┐
+│            AgentLoop (agent-loop.js)              │
+│  ┌──────────┐    ┌──────────┐    ┌─────────┐     │
+│  │ Evaluate  │───→│  Decide  │───→│   Act   │     │
+│  │(LLM + Env │    │(tool_calls│    │(Execute)│     │
+│  │ + Spatial) │    │  or done) │    └────┬────┘     │
+│  └─────↑────┘    └──────────┘         │           │
+│        │                              ↓           │
+│        │         ┌──────────┐   ┌──────────┐      │
+│        └─────────│  Observe │←──│ Results + │      │
+│                  │(+ Env+Sp)│   │ Env State │      │
+│                  └──────────┘   └──────────┘      │
+└─────────────────────────────────────────────────────┘
+         ↓                    ↓
+    ┌──────────┐        ┌──────────┐
+    │ Ollama   │        │ Tool     │
+    │ Client   │        │ Executor │
+    └──────────┘        └─────┬────┘
+                              ↓
+                  ┌───────────┴───────────┐
+                  │ toio-ble  │ toio-sim  │
+                  └───────────┴───────────┘
 ```
 
 ## 起動方法
