@@ -55,33 +55,13 @@
                     </div>
                 </section>
 
-                <section class="control-section quick-actions">
-                    <h2>Quick Actions</h2>
-                    <div class="action-grid">
-                        <button class="action-btn" data-action="move_forward" title="前へ">⬆️</button>
-                        <button class="action-btn" data-action="move_backward" title="後ろへ">⬇️</button>
-                        <button class="action-btn" data-action="spin" title="回る">🔄</button>
-                        <button class="action-btn" data-action="stop" title="止まる">⏹️</button>
-                    </div>
-                    <div class="color-grid">
-                        <button class="color-btn" style="background: red;" data-color="255,0,0"></button>
-                        <button class="color-btn" style="background: lime;" data-color="0,255,0"></button>
-                        <button class="color-btn" style="background: blue;" data-color="0,0,255"></button>
-                        <button class="color-btn" style="background: white;" data-color="255,255,255"></button>
+                <section class="control-section simulation-container">
+                    <h2>Simulation</h2>
+                    <div id="simulation-mat" class="simulation-mat">
+                        <div id="sim-cube" class="sim-cube">toio</div>
                     </div>
                 </section>
             </aside>
-
-            <!-- Simulation Area -->
-            <section class="simulation-area glass-panel">
-                <div class="simulation-header">
-                    <h2>Simulation</h2>
-                </div>
-                <div id="simulation-mat" class="simulation-mat">
-                    <!-- toio cube will be rendered here -->
-                    <div id="sim-cube" class="sim-cube">toio</div>
-                </div>
-            </section>
 
             <!-- Chat Area -->
             <main class="chat-area glass-panel">
