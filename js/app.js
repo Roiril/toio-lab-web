@@ -41,9 +41,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const executor = new ToolExecutor(combinedToio, environment);
     
     // UI state
-    let isProcessingChat = false;
     let isAgentRunning = false;
+    let isProcessingChat = false;
     let currentThinkingNode = null;
+    let hasSyncedInitialPosition = false;
 
     // Agent Loop initialization
     let agentLoop = new AgentLoop(ollama, executor, environment, sessionMemory, spatialAwareness, {
@@ -60,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (isAgentRunning) return; // ✅ Agent実行中は同期を停止して干渉を防ぐ
         if (!toioBle.isConnected || toioBle.isMoving || toioSim.isMoving) return;
 
-        const target = toioSim.simToMat(toioSim.x, toioSim.y);
+        const target = { x: toioSim.x, y: toioSim.y };
         
         const dx = Math.abs(toioBle.x - target.x);
         const dy = Math.abs(toioBle.y - target.y);
@@ -91,11 +92,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
     toioBle.onDisconnectCallback = () => {
         updateToioUIState();
+        hasSyncedInitialPosition = false;
         addMessage("system", "toioキューブが切断されました。");
     };
 
     toioBle.onBatteryUpdateCallback = (batt) => {
         batteryLevel.innerText = `${batt}%`;
+    };
+
+    toioBle.onIdUpdateCallback = (pos) => {
+        // 初回接続時にシミュレーションの位置を実機に合わせる（スナップ）
+        if (!hasSyncedInitialPosition) {
+            toioSim.x = pos.x;
+            toioSim.y = pos.y;
+            toioSim.angle = pos.angle;
+            hasSyncedInitialPosition = true;
+            console.log("Initial position synced from physical cube:", pos);
+        }
+
+        const ghostCube = document.getElementById('ghost-cube');
+        if (ghostCube && toioBle.isConnected) {
+            const simPos = toioSim.matToSim(pos.x, pos.y);
+            ghostCube.style.left = `${simPos.x}px`;
+            ghostCube.style.top = `${simPos.y}px`;
+            ghostCube.style.transform = `translate(-50%, -50%) rotate(${pos.angle + 90}deg)`;
+        }
     };
 
     sendBtn.addEventListener('click', submitChat);
@@ -146,6 +167,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- Functions ---
     function updateToioUIState() {
         const connected = toioBle.isConnected;
+        const ghostCube = document.getElementById('ghost-cube');
 
         if (connected) {
             toioStatusDot.className = "dot connected";
@@ -153,6 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
             cubeInfo.style.display = "block";
             connectToioBtn.disabled = true;
             disconnectToioBtn.disabled = false;
+            if (ghostCube) ghostCube.style.display = "flex";
         } else {
             toioStatusDot.className = "dot connected"; // Sim is always connected
             toioStatusText.innerText = "Simulator Only";
@@ -160,6 +183,7 @@ document.addEventListener("DOMContentLoaded", () => {
             batteryLevel.innerText = "100%";
             connectToioBtn.disabled = false;
             disconnectToioBtn.disabled = true;
+            if (ghostCube) ghostCube.style.display = "none";
         }
     }
 

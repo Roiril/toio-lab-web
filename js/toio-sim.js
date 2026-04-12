@@ -6,9 +6,9 @@ class ToioSim {
         this.cubeElement = document.getElementById('sim-cube');
         this.matElement = document.getElementById('simulation-mat');
         
-        // Initial state in MAT COORDINATES (X: 45-465, Y: 45-345)
-        this.x = 255;
-        this.y = 195;
+        // Initial state in MAT COORDINATES (X: 98-402, Y: 142-358 for Simple Mat)
+        this.x = 250;
+        this.y = 250;
         this.angle = 0; // Degrees
         
         this.leftSpeed = 0;
@@ -78,8 +78,8 @@ class ToioSim {
 
     // --- Coordinate Mapping ---
     matToSim(matX, matY) {
-        const matMinX = 45, matMaxX = 465;
-        const matMinY = 45, matMaxY = 345;
+        const matMinX = 98, matMaxX = 402;
+        const matMinY = 142, matMaxY = 358;
         const simW = this.matElement?.clientWidth || 700;
         const simH = this.matElement?.clientHeight || 500;
 
@@ -89,8 +89,8 @@ class ToioSim {
     }
 
     simToMat(simX, simY) {
-        const matMinX = 45, matMaxX = 465;
-        const matMinY = 45, matMaxY = 345;
+        const matMinX = 98, matMaxX = 402;
+        const matMinY = 142, matMaxY = 358;
         const simW = this.matElement?.clientWidth || 700;
         const simH = this.matElement?.clientHeight || 500;
 
@@ -140,11 +140,13 @@ class ToioSim {
             const v = (vL + vR) / 2;
             const omega = (vR - vL) * angularScale;
 
-            this.angle += omega * dt * 10;
-            const rad = (this.angle - 90) * Math.PI / 180;
+            this.angle = (this.angle + omega * dt * 10) % 360;
+            if (this.angle < 0) this.angle += 360;
+
+            const rad = -this.angle * Math.PI / 180;
             
             this.x += v * Math.cos(rad) * dt;
-            this.y += v * Math.sin(rad) * dt;
+            this.y -= v * Math.sin(rad) * dt;
 
             // mat boundary check
             const matMinX = 98, matMaxX = 402;
@@ -166,6 +168,7 @@ class ToioSim {
         const simPos = this.matToSim(this.x, this.y);
         this.cubeElement.style.left = `${simPos.x}px`;
         this.cubeElement.style.top = `${simPos.y}px`;
-        this.cubeElement.style.transform = `translate(-50%, -50%) rotate(${this.angle}deg)`;
+        // toio 0deg is Right, CSS rotate 0deg is Up. Add 90deg to align.
+        this.cubeElement.style.transform = `translate(-50%, -50%) rotate(${this.angle + 90}deg)`;
     }
 }
