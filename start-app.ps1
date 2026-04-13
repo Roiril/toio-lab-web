@@ -126,7 +126,7 @@ window.APP_CONFIG = {
             Write-Host "===============================================" -ForegroundColor Green
             Write-Host "`nサーバーを停止するにはこのウィンドウを閉じるか Ctrl+C を押してください。" -ForegroundColor Gray
 
-            npx serve .
+            npx -y serve@latest . -l 3000
         }
     }
 } catch {
