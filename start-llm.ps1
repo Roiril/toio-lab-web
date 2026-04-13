@@ -77,7 +77,7 @@ try {
     }
 
     # IPアドレスの取得と表示
-    $ipAddresses = (Get-NetIPAddress -AddressFamily IPv4 -Type Unicast -PrefixOrigin Dhcp,Manual | Where-Object { $_.InterfaceAlias -notmatch "(Loopback|vEthernet|WSL)" }).IPAddress
+    $ipAddresses = @((Get-NetIPAddress -AddressFamily IPv4 -Type Unicast -PrefixOrigin Dhcp,Manual | Where-Object { $_.InterfaceAlias -notmatch "(Loopback|vEthernet|WSL)" }).IPAddress)
     $mainIp = if ($ipAddresses.Count -gt 0) { $ipAddresses[0] } else { "IP取得失敗" }
 
     Write-Host "`n===============================================" -ForegroundColor Green

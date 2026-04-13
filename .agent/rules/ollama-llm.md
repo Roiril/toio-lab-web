@@ -9,3 +9,5 @@ description: OllamaやLLM連携に関する実装ルール
 2. **CORS対応**: ブラウザから直接 Ollama API を呼ぶため、`OLLAMA_ORIGINS` 環境変数の設定が必要。`start.ps1` で自動設定済みだが、README にも手動手順を記載すること。
 3. **ストリーミング**: エージェントループ内の各ステップは `stream: false` で処理し、ステップごとのUI更新で体感を改善する。将来的にステップ内ストリーミングを検討する。
 4. **Tool Calling**: ツール定義は `tools-schema.js` に集約し、`tool-executor.js` で実行する。新しいツールを追加する場合はこの2ファイルを更新すること。
+5. **モデル設定**: 現在のターゲットモデルは `gemma4:e4b`（Gemma 4 Effective 4B）。`start-llm.ps1` の `$targetModel` で管理。モデル名を変更する際はユーザーの発言をそのまま受け取り、勝手に別のモデルに読み替えないこと。
+
