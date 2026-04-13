@@ -14,7 +14,7 @@
         Write-Host "`nLAN内をスキャン中... (ポート11434)" -ForegroundColor Cyan
         
         # 自PCのIPとサブネットベースを取得
-        $myIps = (Get-NetIPAddress -AddressFamily IPv4 -Type Unicast -PrefixOrigin Dhcp,Manual | Where-Object { $_.InterfaceAlias -notmatch "(Loopback|vEthernet|WSL)" }).IPAddress
+        $myIps = @((Get-NetIPAddress -AddressFamily IPv4 -Type Unicast -PrefixOrigin Dhcp,Manual | Where-Object { $_.InterfaceAlias -notmatch "(Loopback|vEthernet|WSL)" }).IPAddress)
         if ($myIps.Count -gt 0) {
             $myIp = $myIps[0]
             $ipBase = $myIp -replace '\.\d+$', '.'
@@ -30,8 +30,8 @@
             }
             
             Write-Host "    アクティブなデバイスを確認中..." -ForegroundColor Gray
-            [System.Threading.Tasks.Task]::WaitAll($pingTasks.Task)
-            $activeIps = $pingTasks | Where-Object { $_.Task.Result.Status -eq 'Success' } | Select-Object -ExpandProperty IP
+            try { [System.Threading.Tasks.Task]::WaitAll($pingTasks.Task) } catch {}
+            $activeIps = @($pingTasks | Where-Object { $_.Task.Status -eq 'RanToCompletion' -and $_.Task.Result.Status -eq 'Success' } | Select-Object -ExpandProperty IP)
             
             Write-Host ("    " + $activeIps.Count + " 台のデバイスと通信可能。Ollamaサーバーを探しています...") -ForegroundColor Gray
             $foundIp = $null
@@ -81,13 +81,19 @@
     $llmUrl = "http://${llmIp}:11434"
     Write-Host "`n[1/2] $llmUrl への接続確認を行っています..." -ForegroundColor Cyan
 
-    # 接続テスト
+    # 接続テスト (最大3回リトライ)
     $isConnected = $false
-    try {
-        Invoke-RestMethod -Uri "$llmUrl/api/tags" -Method Get -TimeoutSec 3 -ErrorAction Stop | Out-Null
-        $isConnected = $true
-    } catch {
-        $isConnected = $false
+    for ($retry = 1; $retry -le 3; $retry++) {
+        try {
+            Invoke-RestMethod -Uri "$llmUrl/api/tags" -Method Get -TimeoutSec 5 -ErrorAction Stop | Out-Null
+            $isConnected = $true
+            break
+        } catch {
+            if ($retry -lt 3) {
+                Write-Host "    接続失敗。リトライ中... ($retry/3)" -ForegroundColor Yellow
+                Start-Sleep -Seconds 2
+            }
+        }
     }
 
     if (-Not $isConnected) {
