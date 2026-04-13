@@ -6,7 +6,7 @@ class AgentLoop {
         this.memory = sessionMemory;
         this.spatial = spatialAwareness;
         
-        this.maxIterations = options.maxIterations || 10;
+        this.maxIterations = options.maxIterations || 30;
         this.onStep = options.onStep || (() => {});
         this.isCancelled = false;
     }
@@ -41,7 +41,7 @@ class AgentLoop {
                 ``,
                 `## ルール`,
                 `- タスクは具体的かつ実行可能な単位で分割してください。`,
-                `- タスクは最大3つまでに制限してください。少なければ少ないほど良いです。`,
+                `- タスクは最大5つまでに制限してください。少なければ少ないほど良いです。`,
                 `- 各タスクには 'description' を含めてください。`,
                 `- 移動と向き変更は常に1タスクにまとめてください（例: 「(250, 200)に向き180度で移動」）。`,
                 `- LED点灯や音などのアクションが必要な場合は、それもタスクに含めてください（例: 「LEDを赤く点灯してから(200, 300)に移動」）。`,
@@ -97,7 +97,7 @@ class AgentLoop {
 
                 let taskReached = false;
                 let taskIteration = 0;
-                const maxTaskRetries = 3;
+                const maxTaskRetries = 5;
                 let lastExecutionFeedback = "";
 
                 while (!taskReached && taskIteration < maxTaskRetries && !this.isCancelled && totalIteration < this.maxIterations) {
@@ -138,7 +138,7 @@ class AgentLoop {
 
                     let allToolCallsForStep = [];
                     let allResultsForStep = [];
-                    const maxToolCallsPerTask = 3; // 1タスクあたりのツール呼び出し上限
+                    const maxToolCallsPerTask = 5; // 1タスクあたりのツール呼び出し上限
 
                     // ツール実行ループ (上限付き)
                     while (currentResponse.tool_calls && currentResponse.tool_calls.length > 0 

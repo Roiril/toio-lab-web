@@ -1,0 +1,6 @@
+- [x] `js/agent-loop.js` のプランナープロンプトを最大5タスクに更新
+- [x] `js/agent-loop.js` の `maxToolCallsPerTask` を 5 に更新
+- [x] `js/agent-loop.js` の `maxTaskRetries` を 5 に更新
+- [x] `js/agent-loop.js` のコントラクタのデフォルト `maxIterations` を 30 に更新
+- [x] `index.html` の `max-iterations` 入力値を 30 に更新
+- [x] 動作確認：設定値の反映と複雑な指示による5タスク分割の確認
