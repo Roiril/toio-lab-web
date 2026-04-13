@@ -2,7 +2,8 @@
  * Simulator class for toio™ Core Cube in Browser
  */
 class ToioSim {
-    constructor() {
+    constructor(spatialAwareness = null) {
+        this.spatial = spatialAwareness;
         this.cubeElement = document.getElementById('sim-cube');
         this.matElement = document.getElementById('simulation-mat');
         
@@ -148,9 +149,10 @@ class ToioSim {
             this.x += v * Math.cos(rad) * dt;
             this.y -= v * Math.sin(rad) * dt;
 
-            // mat boundary check (safeMargin=30 と同等のマージンを適用)
-            const matMinX = 98 + 30, matMaxX = 402 - 30;
-            const matMinY = 142 + 30, matMaxY = 358 - 30;
+            // mat boundary check (safeMargin を参照)
+            const margin = this.spatial ? this.spatial.mat.safeMargin : 30;
+            const matMinX = 98 + margin, matMaxX = 402 - margin;
+            const matMinY = 142 + margin, matMaxY = 358 - margin;
             this.x = Math.max(matMinX, Math.min(matMaxX, this.x));
             this.y = Math.max(matMinY, Math.min(matMaxY, this.y));
 

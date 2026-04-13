@@ -29,8 +29,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const clearMemoryBtn = document.getElementById("clear-memory-btn");
 
     // --- State & Instances ---
+    const spatialAwareness = new SpatialAwareness();
     const toioBle = new ToioBLE();
-    const toioSim = new ToioSim();
+    const toioSim = new ToioSim(spatialAwareness);
     
     const combinedToio = new ToioCombined(toioSim, toioBle);
 
@@ -40,7 +41,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let ollama = new OllamaClient(defaultUrl);
     const sessionMemory = new SessionMemory();
-    const spatialAwareness = new SpatialAwareness();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
     const executor = new ToolExecutor(combinedToio, environment);
     

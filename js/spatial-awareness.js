@@ -12,8 +12,8 @@ class SpatialAwareness {
             unitToMm: { x: 1.35, y: 1.35 },
             // マットの中心座標
             center: { x: 250, y: 250 },
-            // 安全な移動範囲のマージン（キューブの対角線の半分 ≈ 17単位 + 余裕 13単位）
-            safeMargin: 30,
+            // 安全な移動範囲のマージン（キューブの対角線の半分 ≈ 17単位 + 余裕 6単位）
+            safeMargin: 23,
         };
 
         // === キューブ仕様 ===
@@ -28,10 +28,10 @@ class SpatialAwareness {
 
         // === 速度・距離の対応表 ===
         this.speedTable = {
-            10:  23,
-            30:  69,
-            50:  115,
-            80:  184,
+            10: 23,
+            30: 69,
+            50: 115,
+            80: 184,
             100: 230,
         };
     }
@@ -39,10 +39,10 @@ class SpatialAwareness {
     // キューブの現在位置からマット端までの余裕（座標単位）
     getMargins(cubeX, cubeY) {
         return {
-            top:    cubeY - this.mat.coordRange.y.min,
+            top: cubeY - this.mat.coordRange.y.min,
             bottom: this.mat.coordRange.y.max - cubeY,
-            left:   cubeX - this.mat.coordRange.x.min,
-            right:  this.mat.coordRange.x.max - cubeX,
+            left: cubeX - this.mat.coordRange.x.min,
+            right: this.mat.coordRange.x.max - cubeX,
         };
     }
 
