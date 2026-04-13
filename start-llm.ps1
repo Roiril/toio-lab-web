@@ -50,18 +50,19 @@ try {
     # [3/4] Ollamaサーバーの起動確認
     Write-Host "`n[3/4] Ollamaサーバーの起動..." -ForegroundColor Cyan
     $ollamaProcess = Get-Process -Name "ollama" -ErrorAction SilentlyContinue
-    if (-Not $ollamaProcess) {
-        Write-Host "Ollamaサーバーを外部アクセス可能な状態で起動しています..." -ForegroundColor Yellow
-        Start-Process -FilePath $ollamaPath -ArgumentList "serve" -WindowStyle Hidden
-        for ($i=3; $i -gt 0; $i--) {
-             Write-Host ("   起動待機中... " + $i + " 秒") -ForegroundColor Gray
-             Start-Sleep -Seconds 1
-        }
-        Write-Host "[OK] Ollamaサーバーがバックグラウンドで起動しました。" -ForegroundColor Green
-    } else {
-        # 既に起動している場合は環境変数が反映されていない可能性があるので警告
-        Write-Warning "Ollamaサーバーは既に実行中です。もしLAN内の他PCから接続できない場合は、一度タスクトレイからOllamaを終了し、再度このスクリプトを実行してください。"
+    if ($ollamaProcess) {
+        Write-Host "既に実行中の Ollama サーバーを停止しています (環境変数を反映させるため)..." -ForegroundColor Yellow
+        Stop-Process -Name "ollama" -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 2
     }
+
+    Write-Host "Ollamaサーバーを外部アクセス可能な状態で起動しています..." -ForegroundColor Yellow
+    Start-Process -FilePath $ollamaPath -ArgumentList "serve" -WindowStyle Hidden
+    for ($i=3; $i -gt 0; $i--) {
+         Write-Host ("   起動待機中... " + $i + " 秒") -ForegroundColor Gray
+         Start-Sleep -Seconds 1
+    }
+    Write-Host "[OK] Ollamaサーバーが起動しました。" -ForegroundColor Green
 
     # [4/4] AIモデルの確認とダウンロード
     Write-Host "`n[4/4] AIモデル ($targetModel) の確認..." -ForegroundColor Cyan
