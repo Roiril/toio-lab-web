@@ -47,15 +47,71 @@ class ToolExecutor {
                         resultData = { status: "success", desc: "Stopped all movement" };
                         break;
 
-                    case "move_forward":
-                        await this.toio.move(args.speed || 50, args.speed || 50, args.duration_ms);
-                        resultData = { status: "success", desc: `Moved forward for ${args.duration_ms}ms` };
+                    case "move_forward": {
+                        const fwdSpeed = args.speed || 50;
+                        let fwdDuration = args.duration_ms;
+                        let fwdClamped = false;
+
+                        // 安全チェック: 移動距離がマット端を超えないか
+                        if (this.env) {
+                            const snap = this.env.getSnapshot();
+                            const estimatedDist = this.env.spatial.estimateMoveDistance(fwdSpeed, fwdDuration);
+                            const safeDist = this.env.spatial.getSafeDistance(snap.cube.x, snap.cube.y, snap.cube.angle);
+                            
+                            if (estimatedDist > safeDist && safeDist > 0) {
+                                // 安全な時間に短縮
+                                const safeRatio = safeDist / estimatedDist;
+                                fwdDuration = Math.max(100, Math.floor(fwdDuration * safeRatio * 0.9)); // 10%の安全マージンを追加
+                                fwdClamped = true;
+                                console.log(`[Safety] move_forward clamped: ${args.duration_ms}ms → ${fwdDuration}ms (estimated ${Math.round(estimatedDist)} units, safe ${Math.round(safeDist)} units)`);
+                            } else if (safeDist <= 0) {
+                                // 既にマージン内にいる場合は最小時間に
+                                fwdDuration = 100;
+                                fwdClamped = true;
+                                console.log(`[Safety] move_forward: already at margin, limiting to 100ms`);
+                            }
+                        }
+
+                        await this.toio.move(fwdSpeed, fwdSpeed, fwdDuration);
+                        let fwdDesc = `Moved forward for ${fwdDuration}ms`;
+                        if (fwdClamped) {
+                            fwdDesc += `. ⚠️ マット端に近いため、移動距離を制限しました（元の指定: ${args.duration_ms}ms → ${fwdDuration}ms）。`;
+                        }
+                        resultData = { status: "success", desc: fwdDesc, clamped: fwdClamped };
                         break;
+                    }
                         
-                    case "move_backward":
-                        await this.toio.move(-(args.speed || 50), -(args.speed || 50), args.duration_ms);
-                        resultData = { status: "success", desc: `Moved backward for ${args.duration_ms}ms` };
+                    case "move_backward": {
+                        const bwdSpeed = args.speed || 50;
+                        let bwdDuration = args.duration_ms;
+                        let bwdClamped = false;
+
+                        // 安全チェック: 後退方向の距離をチェック
+                        if (this.env) {
+                            const snap = this.env.getSnapshot();
+                            const estimatedDist = this.env.spatial.estimateMoveDistance(bwdSpeed, bwdDuration);
+                            const safeDist = this.env.spatial.getSafeDistance(snap.cube.x, snap.cube.y, snap.cube.angle, true);
+                            
+                            if (estimatedDist > safeDist && safeDist > 0) {
+                                const safeRatio = safeDist / estimatedDist;
+                                bwdDuration = Math.max(100, Math.floor(bwdDuration * safeRatio * 0.9));
+                                bwdClamped = true;
+                                console.log(`[Safety] move_backward clamped: ${args.duration_ms}ms → ${bwdDuration}ms`);
+                            } else if (safeDist <= 0) {
+                                bwdDuration = 100;
+                                bwdClamped = true;
+                                console.log(`[Safety] move_backward: already at margin, limiting to 100ms`);
+                            }
+                        }
+
+                        await this.toio.move(-bwdSpeed, -bwdSpeed, bwdDuration);
+                        let bwdDesc = `Moved backward for ${bwdDuration}ms`;
+                        if (bwdClamped) {
+                            bwdDesc += `. ⚠️ マット端に近いため、移動距離を制限しました（元の指定: ${args.duration_ms}ms → ${bwdDuration}ms）。`;
+                        }
+                        resultData = { status: "success", desc: bwdDesc, clamped: bwdClamped };
                         break;
+                    }
                         
                     case "turn":
                         const s = args.speed || 50;

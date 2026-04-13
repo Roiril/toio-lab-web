@@ -148,9 +148,9 @@ class ToioSim {
             this.x += v * Math.cos(rad) * dt;
             this.y -= v * Math.sin(rad) * dt;
 
-            // mat boundary check
-            const matMinX = 98, matMaxX = 402;
-            const matMinY = 142, matMaxY = 358;
+            // mat boundary check (safeMargin=30 と同等のマージンを適用)
+            const matMinX = 98 + 30, matMaxX = 402 - 30;
+            const matMinY = 142 + 30, matMaxY = 358 - 30;
             this.x = Math.max(matMinX, Math.min(matMaxX, this.x));
             this.y = Math.max(matMinY, Math.min(matMaxY, this.y));
 

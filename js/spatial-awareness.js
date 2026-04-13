@@ -12,8 +12,8 @@ class SpatialAwareness {
             unitToMm: { x: 1.35, y: 1.35 },
             // マットの中心座標
             center: { x: 250, y: 250 },
-            // 安全な移動範囲のマージン（キューブの幅の半分強 = 約20単位）
-            safeMargin: 20,
+            // 安全な移動範囲のマージン（キューブの対角線の半分 ≈ 17単位 + 余裕 13単位）
+            safeMargin: 30,
         };
 
         // === キューブ仕様 ===
@@ -59,6 +59,82 @@ class SpatialAwareness {
         return { x: safeX, y: safeY };
     }
 
+    /**
+     * 速度と時間から移動距離（座標単位）を概算します。
+     * speedTable を線形補間して使用。
+     * @param {number} speed 速度 (10-100)
+     * @param {number} durationMs 時間 (ms)
+     * @returns {number} 推定移動距離（座標単位）
+     */
+    estimateMoveDistance(speed, durationMs) {
+        // speedTable: speed -> coord units per second
+        const entries = Object.entries(this.speedTable)
+            .map(([s, d]) => [Number(s), d])
+            .sort((a, b) => a[0] - b[0]);
+
+        let unitsPerSec;
+        if (speed <= entries[0][0]) {
+            unitsPerSec = entries[0][1];
+        } else if (speed >= entries[entries.length - 1][0]) {
+            unitsPerSec = entries[entries.length - 1][1];
+        } else {
+            // 線形補間
+            for (let i = 0; i < entries.length - 1; i++) {
+                if (speed >= entries[i][0] && speed <= entries[i + 1][0]) {
+                    const ratio = (speed - entries[i][0]) / (entries[i + 1][0] - entries[i][0]);
+                    unitsPerSec = entries[i][1] + ratio * (entries[i + 1][1] - entries[i][1]);
+                    break;
+                }
+            }
+        }
+
+        return (unitsPerSec * durationMs) / 1000;
+    }
+
+    /**
+     * 現在位置と向きから、進行方向のマット端までの安全距離（safeMargin を差し引いた値）を返します。
+     * @param {number} cubeX 現在のX座標
+     * @param {number} cubeY 現在のY座標
+     * @param {number} angleDeg 現在の角度（度数法、0=右、90=下、180=左、270=上）
+     * @param {boolean} reverse trueなら逆方向（後退時）の距離を返す
+     * @returns {number} 安全に移動できる最大距離（座標単位）。0以下なら既にマージン内。
+     */
+    getSafeDistance(cubeX, cubeY, angleDeg, reverse = false) {
+        const margin = this.mat.safeMargin;
+        const range = this.mat.coordRange;
+
+        // 有効な角度を計算（後退時は180度反転）
+        let effectiveAngle = angleDeg;
+        if (reverse) effectiveAngle = (angleDeg + 180) % 360;
+
+        const rad = effectiveAngle * Math.PI / 180;
+        const cosA = Math.cos(rad);
+        const sinA = Math.sin(rad);
+
+        // 各壁までの距離を方向ベクトルで割って最小値を求める
+        let minDist = Infinity;
+
+        // X方向の壁
+        if (cosA > 0.01) {
+            // 右の壁まで
+            minDist = Math.min(minDist, ((range.x.max - margin) - cubeX) / cosA);
+        } else if (cosA < -0.01) {
+            // 左の壁まで
+            minDist = Math.min(minDist, ((range.x.min + margin) - cubeX) / cosA);
+        }
+
+        // Y方向の壁（toio座標系: 角度0=右、sinで下方向）
+        if (sinA > 0.01) {
+            // 下の壁まで
+            minDist = Math.min(minDist, ((range.y.max - margin) - cubeY) / sinA);
+        } else if (sinA < -0.01) {
+            // 上の壁まで
+            minDist = Math.min(minDist, ((range.y.min + margin) - cubeY) / sinA);
+        }
+
+        return Math.max(0, minDist);
+    }
+
     coordToMm(coordUnits) {
         return Math.round(coordUnits * this.mat.unitToMm.x);
     }
@@ -91,7 +167,12 @@ class SpatialAwareness {
             ``,
             `## 推奨される操縦方法`,
             `- 特定の場所へ行くには \`move_to(x, y, angle)\` を使用するのが最も確実です。`,
-            `- 向きだけを変えたい場合は \`turn\` または \`move_to\` で現在位置のまま角度だけを指定してください。`
+            `- 向きだけを変えたい場合は \`turn\` または \`move_to\` で現在位置のまま角度だけを指定してください。`,
+            ``,
+            `## ⚠️ マット端の安全制御`,
+            `- \`move_to\` は自動的に安全範囲にクランプされます（端から${m}単位のマージン）。`,
+            `- \`move_forward\` / \`move_backward\` も端に衝突しそうな場合は自動的に距離が制限されます。`,
+            `- 端付近（余裕${m}単位以内）では短距離の移動を心がけてください。`
         ].join('\n');
     }
 
