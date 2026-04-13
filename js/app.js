@@ -34,7 +34,11 @@ document.addEventListener("DOMContentLoaded", () => {
     
     const combinedToio = new ToioCombined(toioSim, toioBle);
 
-    let ollama = new OllamaClient();
+    // Setup URL from dynamic config if available
+    const defaultUrl = window.APP_CONFIG?.OLLAMA_URL || "http://localhost:11434";
+    ollamaUrlInput.value = defaultUrl;
+
+    let ollama = new OllamaClient(defaultUrl);
     const sessionMemory = new SessionMemory();
     const spatialAwareness = new SpatialAwareness();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);

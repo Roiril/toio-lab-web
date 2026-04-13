@@ -1,0 +1,6 @@
+- [x] 1. `start.bat` を正しい内容で Shift-JIS 形式にて作成
+- [x] 2. `start-app.bat` を正しい内容で Shift-JIS 形式にて作成
+- [x] 3. `start-llm.bat` を正しい内容で Shift-JIS 形式にて作成
+- [x] 4. `fix.ps1` を、読み込み時にもエンコーディングを明示するように修正
+- [x] 5. PowerShellスクリプトが UTF-8 with BOM であることを確認・修正
+- [x] 6. 動作確認 (`start.bat` を実行)

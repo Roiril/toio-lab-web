@@ -1,13 +1,16 @@
 @echo off
-chcp 65001 > nul
-echo ===================================
-echo   toio Lab Web - 自動起動スクリプト
-echo ===================================
+setlocal
+cd /d "%~dp0"
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& { try { . '%~dp0start.ps1' } catch { Write-Host '致命的なエラーが発生しました: ' + $_.Exception.Message -ForegroundColor Red; pause } }"
+echo Launching toio Lab Web...
+
+PowerShell -NoProfile -ExecutionPolicy Bypass -File "start.ps1"
 
 if %ERRORLEVEL% neq 0 (
     echo.
-    echo [ERROR] PowerShellの実行中に問題が発生しました。
+    echo [ERROR] An error occurred during script execution.
+    echo Please check if PowerShell is working correctly.
+    echo.
     pause
 )
+endlocal
