@@ -1,0 +1,5 @@
+- [x] `start-llm.ps1` の構文エラー修正とモデル設定（`gemma4:e4b`）の更新
+- [x] `start-app.ps1` の未使用変数 `$response` の修正
+- [/] `convert_encodings.ps1` の作成と全ファイルのエンコーディング統一
+- [ ] 修正後の PowerShell スクリプトの動作確認（構文チェック）
+- [ ] 完了報告（ウォークスルーの作成）

@@ -9,7 +9,7 @@ try {
 
     # 設定
     $ollamaPath = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
-    $targetModel = "gemma2:2b" # 小さめのモデルをデフォルトに
+    $targetModel = "gemma4:e4b" # ユーザー指定: gemma4 の 4b (Effective 4B)
 
     # [1/4] Ollama本体のインストールとアップデート確認
     Write-Host "`n[1/4] Ollama本体の状態を確認中..." -ForegroundColor Cyan
@@ -95,4 +95,3 @@ try {
 
 Write-Host "`n終了しました。" -ForegroundColor Gray
 Read-Host "Enterキーを押すとウィンドウを閉じます"
-

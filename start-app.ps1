@@ -84,7 +84,7 @@
     # 接続テスト
     $isConnected = $false
     try {
-        $response = Invoke-RestMethod -Uri "$llmUrl/api/tags" -Method Get -TimeoutSec 3 -ErrorAction Stop
+        Invoke-RestMethod -Uri "$llmUrl/api/tags" -Method Get -TimeoutSec 3 -ErrorAction Stop | Out-Null
         $isConnected = $true
     } catch {
         $isConnected = $false

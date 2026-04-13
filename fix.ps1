@@ -1,4 +1,4 @@
-# PowerShell 5.1/7 両対応でエンコーディングを修正するスクリプト
+﻿# PowerShell 5.1/7 両対応でエンコーディングを修正するスクリプト
 
 # PowerShellスクリプト (.ps1) を UTF-8 with BOM に変換
 $psFiles = Get-ChildItem -Filter *.ps1 -Recurse
