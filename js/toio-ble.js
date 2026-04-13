@@ -36,10 +36,17 @@ class ToioBLE {
         this.onButtonUpdateCallback = null;
         this.onIdUpdateCallback = null;
         this._pendingMove = null;
+        this._controlId = 0;
     }
 
     get isConnected() {
         return this.device && this.device.gatt.connected;
+    }
+
+    _getNextControlId() {
+        this._controlId = (this._controlId + 1) % 256;
+        if (this._controlId === 0) this._controlId = 1; // 0 is often used as default, let's use 1-255
+        return this._controlId;
     }
 
     async connect() {
@@ -150,11 +157,26 @@ class ToioBLE {
             const type = dv.getUint8(0);
             if (type === 0x83) { // Targeted move response
                 // [0x83, ControlID, Result]
+                const controlId = dv.getUint8(1);
                 const result = dv.getUint8(2);
-                console.log(`[toio] Motor move response: 0x${result.toString(16).padStart(2, '0')}`);
                 
-                if (this._pendingMove) {
-                    this._pendingMove.resolve(result);
+                const resultsMap = {
+                    0x00: "Success",
+                    0x01: "Timeout",
+                    0x02: "Reached target with error",
+                    0x03: "Parameter error",
+                    0x04: "Interrupted by new command",
+                    0x05: "Internal error",
+                    0x06: "Invalid Mat ID",
+                    0x07: "Transmission error",
+                    0x62: "Target move interrupted",
+                    0xFF: "Unknown error"
+                };
+                const resultStr = resultsMap[result] || `Other error (0x${result.toString(16)})`;
+                console.log(`[toio] Motor move response (ID:${controlId}): 0x${result.toString(16).padStart(2, '0')} (${resultStr})`);
+                
+                if (this._pendingMove && this._pendingMove.controlId === controlId) {
+                    this._pendingMove.resolve({ result, resultStr });
                     this._pendingMove = null;
                 }
             }
@@ -245,51 +267,60 @@ class ToioBLE {
      * @returns {Promise<number>} Result code from toio (0x00 = success)
      */
     async moveTo(x, y, angle = 0) {
-        if (!this.isConnected) return 0xFF;
+        if (!this.isConnected) return { result: 0xFF, resultStr: "Not connected" };
 
+        const controlId = this._getNextControlId();
         const buf = new Uint8Array(13);
         buf[0] = 0x03; // Targeted move
-        buf[1] = 0x00; // Control ID
-        buf[2] = 0x00; // Timeout
+        buf[1] = controlId;
+        buf[2] = 0x00; // Timeout (0 = 10 sec by default in Targeted Move?) 
+                       // Actually spec: 0 means no timeout monitor. We use our own 15s timeout.
         buf[3] = 0x01; // Movement type (Target + Angle)
-        buf[4] = 0x50; // Max speed
-        buf[5] = 0x00; // Speed type
+        buf[4] = 0x50; // Max speed (80)
+        buf[5] = 0x00; // Speed type (Uniform speed)
         buf[6] = 0x00; // Reserved
         
         const dv = new DataView(buf.buffer);
         dv.setUint16(7, x, true);
         dv.setUint16(9, y, true);
-        dv.setUint16(11, angle, true);
+        
+        // 角度を 0-359 の範囲に正規化
+        const normalizedAngle = ((angle % 360) + 360) % 360;
+        dv.setUint16(11, normalizedAngle, true);
 
         return new Promise((resolve) => {
             // Safety timeout (15 seconds)
             const timeout = setTimeout(() => {
-                if (this._pendingMove) {
-                    console.warn("[toio] MoveTo timed out after 15s");
+                if (this._pendingMove && this._pendingMove.controlId === controlId) {
+                    console.warn(`[toio] MoveTo (ID:${controlId}) timed out after 15s`);
                     this._pendingMove = null;
                     this.isMoving = false;
-                    resolve(0x01); // 0x01 = Timeout
+                    resolve({ result: 0x01, resultStr: "Timeout" });
                 }
             }, 15000);
 
             this._pendingMove = {
-                resolve: (result) => {
+                controlId,
+                resolve: (res) => {
                     clearTimeout(timeout);
                     this.isMoving = false;
-                    resolve(result);
+                    resolve(res);
                 }
             };
 
             this.characteristics.motor.writeValueWithoutResponse(buf)
                 .then(() => {
                     this.isMoving = true;
+                    console.log(`[toio] Sent moveTo(ID:${controlId}) to (${x}, ${y}) angle ${angle}`);
                 })
                 .catch(err => {
-                    console.error("[toio] moveTo write failed:", err);
+                    console.error(`[toio] moveTo(ID:${controlId}) write failed:`, err);
                     clearTimeout(timeout);
-                    this._pendingMove = null;
+                    if (this._pendingMove && this._pendingMove.controlId === controlId) {
+                        this._pendingMove = null;
+                    }
                     this.isMoving = false;
-                    resolve(0xFF);
+                    resolve({ result: 0xFF, resultStr: err.message });
                 });
         });
     }

@@ -11,6 +11,9 @@ class ToolExecutor {
         const results = [];
         
         for (const call of toolCalls) {
+            // BLE通信の安定性のため、コマンド間にわずかな待機時間を設ける
+            await new Promise(r => setTimeout(r, 50));
+            
             const funcName = call.function.name;
             const args = call.function.arguments || {};
             
@@ -151,7 +154,7 @@ class ToolExecutor {
                         if (isClamped) {
                             console.log(`Clamping move_to from (${args.x}, ${args.y}) to safe position (${safePos.x}, ${safePos.y})`);
                         }
-                        await this.toio.moveTo(safePos.x, safePos.y, args.angle || 0);
+                        const moveRes = await this.toio.moveTo(safePos.x, safePos.y, args.angle || 0);
                         
                         // ✅ Get actual position after movement
                         const afterSnap = this.env.getSnapshot();
@@ -161,7 +164,7 @@ class ToolExecutor {
                             angle: afterSnap.cube.angle 
                         };
 
-                        let desc = `Moving to (${safePos.x}, ${safePos.y}) with angle ${args.angle || 0}. Arrived at (${arrivedAt.x}, ${arrivedAt.y}) angle ${arrivedAt.angle}.`;
+                        let desc = `Moving to (${safePos.x}, ${safePos.y}) with angle ${args.angle || 0}. Result: ${moveRes.resultStr || "OK"}. Arrived at (${arrivedAt.x}, ${arrivedAt.y}) angle ${arrivedAt.angle}.`;
                         if (isClamped) {
                             desc += `. ⚠️注意: 指定された座標 (${args.x}, ${args.y}) はマットの安全範囲外だったため、最も近い安全な位置 (${safePos.x}, ${safePos.y}) に制限されました。`;
                         }
