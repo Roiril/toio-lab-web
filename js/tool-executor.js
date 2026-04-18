@@ -25,7 +25,18 @@ class ToolExecutor {
             await new Promise(r => setTimeout(r, 50));
             
             const funcName = call.function.name;
-            const args = call.function.arguments || {};
+            let args = call.function.arguments || {};
+
+            // LLM (特に Ollama) によっては arguments が文字列で渡される場合があるため補正
+            if (typeof args === 'string') {
+                try {
+                    args = JSON.parse(args);
+                } catch (e) {
+                    console.warn(`[ToolExecutor] Failed to parse arguments for ${funcName}:`, e);
+                    // そのまま進めるが、パース失敗時は空オブジェクトにフォールバック
+                    args = {};
+                }
+            }
             
             console.log(`Executing Tool [${funcName}]:`, args);
             let resultData = {};

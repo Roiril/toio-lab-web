@@ -22,11 +22,17 @@ class AgentLoop {
         if (moveCallIdx !== -1) {
             let target = toolCalls[moveCallIdx].function.arguments;
             try {
+                if (typeof target === 'string') {
+                    target = JSON.parse(target);
+                }
                 const resData = JSON.parse(results[moveCallIdx]);
                 if (resData.clamped_target) {
                     target = { ...target, ...resData.clamped_target };
                 }
-            } catch (e) {}
+            } catch (e) {
+                // パース失敗時はそのまま target (文字列 or オブジェクト) を使用
+                console.warn("[AgentLoop] Error parsing move_to target/result during evaluation:", e);
+            }
             
             const actual = this.env.getSnapshot().cube;
 
