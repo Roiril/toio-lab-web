@@ -51,12 +51,18 @@ class AgentLoop {
             };
         }
 
+        // think のみの場合は評価をスキップ（思考は「完了」ではない）
+        const onlyThink = toolCalls.every(c => c.function.name === 'think');
+        if (onlyThink) {
+            return { success: true, reasoning: null };
+        }
+
         // move_to 以外（LED・音・spin等）: 全ツールが success なら完了
         const allSuccess = results.every(r => {
             try { return JSON.parse(r).status === 'success'; }
             catch { return false; }
         });
-        return { success: allSuccess, reasoning: allSuccess ? "全ツール成功" : "ツール失敗あり" };
+        return { success: allSuccess, reasoning: allSuccess ? "実行完了" : "ツール失敗あり" };
     }
 
     async run(userMessage, tools) {
@@ -79,6 +85,7 @@ class AgentLoop {
                 `- ツールを呼ぶ直前に、テキストで「〜します」と一言宣言すること。`,
                 `- 全ての操作が完了したら「〜しました！」とテキストで報告すること。`,
                 `- ツール失敗や未到達の場合は「〜がうまくいかなかったので、もう一度試みます」と説明してからリトライすること。`,
+                `- ❗ think() で立てた計画は必ず全ステップを最後まで実行すること。move_to が成功しても、光・音・回転など残りのステップがあれば続けて tool_calls を返すこと。途中で止まらない。`,
                 ``,
                 `## move_to の挙動`,
                 `- move_to(x, y, angle) は内部で3ステップで動作する:`,
@@ -156,14 +163,15 @@ class AgentLoop {
 
                 // #1: ローカル評価（LLM 不要）
                 const evaluation = this._localEvaluate(toolCalls, results);
-                this.onStep({
-                    type: 'thinking',
-                    iteration,
-
-                    message: evaluation.success
-                        ? `完了: ${evaluation.reasoning}`
-                        : `未到達: ${evaluation.reasoning}`
-                });
+                if (evaluation.reasoning !== null) {
+                    this.onStep({
+                        type: 'thinking',
+                        iteration,
+                        message: evaluation.success
+                            ? `完了: ${evaluation.reasoning}`
+                            : `未到達: ${evaluation.reasoning}`
+                    });
+                }
 
                 // 未到達の場合、LLM に渡す結果に警告を注入してリトライを促す
                 let resultsForLLM = results;
