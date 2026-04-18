@@ -9,8 +9,15 @@ document.addEventListener("DOMContentLoaded", () => {
     const sendBtn = document.getElementById("send-btn");
     const cancelBtn = document.getElementById("cancel-btn");
     
-    const ollamaStatusDot = document.getElementById("ollama-status-dot");
-    const ollamaStatusText = document.getElementById("ollama-status-text");
+    const llmStatusDot = document.getElementById("llm-status-dot");
+    const llmStatusText = document.getElementById("llm-status-text");
+    
+    const llmProviderSelect = document.getElementById("llm-provider");
+    const geminiSettingsGroup = document.getElementById("gemini-settings-group");
+    const ollamaSettingsGroup = document.getElementById("ollama-settings-group");
+    const ollamaBaseUrlInput = document.getElementById("ollama-base-url");
+    const ollamaModelInput = document.getElementById("ollama-model");
+
     const geminiApiKeyInput = document.getElementById("gemini-api-key");
     const geminiModelInput = document.getElementById("gemini-model");
 
@@ -35,13 +42,40 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const combinedToio = new ToioCombined(toioSim, toioBle);
 
-    // API キーは config.js (= .env.local 由来) から読み込む
+    // 設定は LocalStorage または config.js から読み込む
+    const savedProvider = window.APP_CONFIG?.LLM_PROVIDER || localStorage.getItem('llm_provider') || 'gemini';
     const savedApiKey = window.APP_CONFIG?.GEMINI_API_KEY || localStorage.getItem('gemini_api_key') || '';
-    const savedModel = window.APP_CONFIG?.GEMINI_MODEL || localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
-    if (geminiApiKeyInput) geminiApiKeyInput.value = savedApiKey;
-    if (geminiModelInput) geminiModelInput.value = savedModel;
+    const savedGeminiModel = window.APP_CONFIG?.GEMINI_MODEL || localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
+    const savedOllamaBaseUrl = window.APP_CONFIG?.OLLAMA_BASE_URL || localStorage.getItem('ollama_base_url') || 'http://localhost:11434';
+    const savedOllamaModel = window.APP_CONFIG?.OLLAMA_MODEL || localStorage.getItem('ollama_model') || 'gemma4:e4b';
 
-    let llmClient = new GeminiClient(savedApiKey, savedModel);
+    if (llmProviderSelect) llmProviderSelect.value = savedProvider;
+    if (geminiApiKeyInput) geminiApiKeyInput.value = savedApiKey;
+    if (geminiModelInput) geminiModelInput.value = savedGeminiModel;
+    if (ollamaBaseUrlInput) ollamaBaseUrlInput.value = savedOllamaBaseUrl;
+    if (ollamaModelInput) ollamaModelInput.value = savedOllamaModel;
+
+    // プロバイダー変更時に設定の表示を切り替える
+    const updateSettingsVisibility = () => {
+        if (llmProviderSelect.value === 'ollama') {
+            geminiSettingsGroup.style.display = 'none';
+            ollamaSettingsGroup.style.display = 'block';
+        } else {
+            geminiSettingsGroup.style.display = 'block';
+            ollamaSettingsGroup.style.display = 'none';
+        }
+    };
+    if (llmProviderSelect) {
+        llmProviderSelect.addEventListener('change', updateSettingsVisibility);
+        updateSettingsVisibility();
+    }
+
+    let llmClient;
+    if (savedProvider === 'ollama') {
+        llmClient = new OllamaClient(savedOllamaBaseUrl, savedOllamaModel);
+    } else {
+        llmClient = new GeminiClient(savedApiKey, savedGeminiModel);
+    }
     const sessionMemory = new SessionMemory();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
     const executor = new ToolExecutor(combinedToio, environment);
@@ -59,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // --- initialization ---
-    checkOllamaConnection();
+    checkLlmConnection();
     updateToioUIState();
 
     // --- Synchronization Loop ---
@@ -158,11 +192,23 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     saveSettingsBtn.addEventListener('click', () => {
+        const newProvider = llmProviderSelect.value;
         const newApiKey = geminiApiKeyInput.value.trim();
-        const newModel = geminiModelInput.value.trim() || 'gemini-2.5-flash';
+        const newGeminiModel = geminiModelInput.value.trim() || 'gemini-2.5-flash';
+        const newOllamaBaseUrl = ollamaBaseUrlInput.value.trim() || 'http://localhost:11434';
+        const newOllamaModel = ollamaModelInput.value.trim() || 'gemma4:e4b';
+
+        localStorage.setItem('llm_provider', newProvider);
         localStorage.setItem('gemini_api_key', newApiKey);
-        localStorage.setItem('gemini_model', newModel);
-        llmClient = new GeminiClient(newApiKey, newModel);
+        localStorage.setItem('gemini_model', newGeminiModel);
+        localStorage.setItem('ollama_base_url', newOllamaBaseUrl);
+        localStorage.setItem('ollama_model', newOllamaModel);
+
+        if (newProvider === 'ollama') {
+            llmClient = new OllamaClient(newOllamaBaseUrl, newOllamaModel);
+        } else {
+            llmClient = new GeminiClient(newApiKey, newGeminiModel);
+        }
 
         // Re-init agent loop
         agentLoop = new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
@@ -171,7 +217,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         settingsModal.classList.remove('active');
-        checkOllamaConnection();
+        checkLlmConnection();
     });
 
     // Quick Actions were removed from UI
@@ -200,15 +246,32 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    async function checkOllamaConnection() {
-        ollamaStatusText.innerText = "Gemini: Checking...";
-        const { ok, reason } = await llmClient.checkConnection();
+    async function checkLlmConnection() {
+        const isOllama = llmClient instanceof OllamaClient;
+        const providerName = isOllama ? "Ollama" : "Gemini";
+        llmStatusText.innerText = `${providerName}: Checking...`;
+        
+        let ok, reason;
+        try {
+            const res = await llmClient.checkConnection();
+            if (typeof res === "object") {
+                ok = res.ok;
+                reason = res.reason;
+            } else {
+                ok = res;
+                reason = "Unknown Error";
+            }
+        } catch (e) {
+            ok = false;
+            reason = e.message;
+        }
+
         if (ok) {
-            ollamaStatusDot.className = "dot connected";
-            ollamaStatusText.innerText = `Gemini: Ready (${llmClient.model})`;
+            llmStatusDot.className = "dot connected";
+            llmStatusText.innerText = `${providerName}: Ready (${llmClient.model})`;
         } else {
-            ollamaStatusDot.className = "dot disconnected";
-            ollamaStatusText.innerText = `Gemini: Error — ${reason}`;
+            llmStatusDot.className = "dot disconnected";
+            llmStatusText.innerText = `${providerName}: Error — ${reason || "Connection failed"}`;
         }
     }
 

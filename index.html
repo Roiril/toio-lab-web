@@ -31,8 +31,8 @@
                 <section class="control-section">
                     <h2>LLM Connection</h2>
                     <div class="status-indicator">
-                        <span id="ollama-status-dot" class="dot disconnected"></span>
-                        <span id="ollama-status-text">Gemini: Checking...</span>
+                        <span id="llm-status-dot" class="dot disconnected"></span>
+                        <span id="llm-status-text">Checking...</span>
                     </div>
                 </section>
 
@@ -98,12 +98,35 @@
         <div class="modal-content glass-panel">
             <h2>設定</h2>
             <div class="form-group">
-                <label for="gemini-api-key">Gemini API Key</label>
-                <input type="password" id="gemini-api-key" placeholder="AIza...">
+                <label for="llm-provider">LLM Provider</label>
+                <select id="llm-provider" style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #ccc; background: transparent; color: inherit; font-family: inherit;">
+                    <option value="gemini" style="color: #000;">Google AI Studio (Gemini)</option>
+                    <option value="ollama" style="color: #000;">Local Ollama</option>
+                </select>
             </div>
-            <div class="form-group">
-                <label for="gemini-model">Model</label>
-                <input type="text" id="gemini-model" value="gemini-2.5-flash">
+            
+            <!-- Gemini Settings -->
+            <div id="gemini-settings-group">
+                <div class="form-group">
+                    <label for="gemini-api-key">Gemini API Key</label>
+                    <input type="password" id="gemini-api-key" placeholder="AIza...">
+                </div>
+                <div class="form-group">
+                    <label for="gemini-model">Gemini Model</label>
+                    <input type="text" id="gemini-model" value="gemini-2.5-flash">
+                </div>
+            </div>
+
+            <!-- Ollama Settings -->
+            <div id="ollama-settings-group" style="display: none;">
+                <div class="form-group">
+                    <label for="ollama-base-url">Ollama Base URL</label>
+                    <input type="text" id="ollama-base-url" value="http://localhost:11434">
+                </div>
+                <div class="form-group">
+                    <label for="ollama-model">Ollama Model</label>
+                    <input type="text" id="ollama-model" value="gemma4:e4b">
+                </div>
             </div>
             <div class="form-group">
                 <label for="max-iterations" title="自律行動の最大ステップ数。数字が大きいほど複雑なタスクをこなせますが、時間がかかります。">最大ステップ数 (Max Iterations) ℹ️</label>

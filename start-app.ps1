@@ -1,24 +1,30 @@
-try {
+﻿try {
     Write-Host "--- toio Lab Web [アプリ起動] ---" -ForegroundColor Cyan
 
     # .env.local の読み込み
     $envPath = Join-Path $PSScriptRoot ".env.local"
+    $llmProvider = "gemini"
     $geminiApiKey = ""
     $geminiModel = "gemini-2.5-flash"
+    $ollamaBaseUrl = "http://localhost:11434"
+    $ollamaModel = "gemma4:e4b"
 
     if (Test-Path $envPath) {
         Get-Content $envPath | ForEach-Object {
+            if ($_ -match "^LLM_PROVIDER=(.+)$")   { $llmProvider  = $Matches[1].Trim() }
             if ($_ -match "^GEMINI_API_KEY=(.+)$") { $geminiApiKey = $Matches[1].Trim() }
             if ($_ -match "^GEMINI_MODEL=(.+)$")   { $geminiModel  = $Matches[1].Trim() }
+            if ($_ -match "^OLLAMA_BASE_URL=(.+)$"){ $ollamaBaseUrl  = $Matches[1].Trim() }
+            if ($_ -match "^OLLAMA_MODEL=(.+)$")   { $ollamaModel  = $Matches[1].Trim() }
         }
         Write-Host "[OK] .env.local を読み込みました。" -ForegroundColor Green
     } else {
-        Write-Host "[警告] .env.local が見つかりません。APIキーなしで起動します。" -ForegroundColor Yellow
-        Write-Host "       .env.local を作成し GEMINI_API_KEY=<your-key> を記載してください。" -ForegroundColor Gray
+        Write-Host "[警告] .env.local が見つかりません。デフォルト設定で起動します。" -ForegroundColor Yellow
+        Write-Host "       必要に応じて.env.localを作成し各種キーを記載してください。" -ForegroundColor Gray
     }
 
-    if ([string]::IsNullOrWhiteSpace($geminiApiKey)) {
-        Write-Host "[警告] GEMINI_API_KEY が設定されていません。起動後にUIから入力してください。" -ForegroundColor Yellow
+    if ($llmProvider -eq "gemini" -and [string]::IsNullOrWhiteSpace($geminiApiKey)) {
+        Write-Host "[警告] GEMINI_API_KEY が設定されていません。起動後にUIから入力するか、Ollamaプロバイダーを使用してください。" -ForegroundColor Yellow
     }
 
     # config.js の生成
@@ -27,8 +33,11 @@ try {
     $configContent = @"
 // .env.local から生成されたファイルです。git管理外。
 window.APP_CONFIG = {
+    LLM_PROVIDER: "$llmProvider",
     GEMINI_API_KEY: "$geminiApiKey",
-    GEMINI_MODEL: "$geminiModel"
+    GEMINI_MODEL: "$geminiModel",
+    OLLAMA_BASE_URL: "$ollamaBaseUrl",
+    OLLAMA_MODEL: "$ollamaModel"
 };
 "@
     Set-Content -Path $configPath -Value $configContent -Encoding UTF8

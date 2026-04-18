@@ -11,6 +11,13 @@ try {
     $ollamaPath = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
     $targetModel = "gemma4:e4b" # ユーザー指定: gemma4 の 4b (Effective 4B)
 
+    $envPath = Join-Path $PSScriptRoot ".env.local"
+    if (Test-Path $envPath) {
+        Get-Content $envPath | ForEach-Object {
+            if ($_ -match "^OLLAMA_MODEL=(.+)$") { $targetModel = $Matches[1].Trim() }
+        }
+    }
+
     # [1/4] Ollama本体のインストールとアップデート確認
     Write-Host "`n[1/4] Ollama本体の状態を確認中..." -ForegroundColor Cyan
     if (-Not (Test-Path $ollamaPath)) {
