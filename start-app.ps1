@@ -10,15 +10,16 @@
     $ollamaModel = "gemma4:e4b"
 
     if (Test-Path $envPath) {
-        Get-Content $envPath | ForEach-Object {
-            if ($_ -match "^LLM_PROVIDER=(.+)$")   { $llmProvider  = $Matches[1].Trim() }
-            if ($_ -match "^GEMINI_API_KEY=(.+)$") { $geminiApiKey = $Matches[1].Trim() }
-            if ($_ -match "^GEMINI_MODEL=(.+)$")   { $geminiModel  = $Matches[1].Trim() }
-            if ($_ -match "^OLLAMA_BASE_URL=(.+)$"){ $ollamaBaseUrl  = $Matches[1].Trim() }
-            if ($_ -match "^OLLAMA_MODEL=(.+)$")   { $ollamaModel  = $Matches[1].Trim() }
+        foreach ($line in (Get-Content $envPath)) {
+            if ($line -match "^LLM_PROVIDER=(.+)$") { $llmProvider = $Matches[1].Trim() }
+            if ($line -match "^GEMINI_API_KEY=(.+)$") { $geminiApiKey = $Matches[1].Trim() }
+            if ($line -match "^GEMINI_MODEL=(.+)$") { $geminiModel = $Matches[1].Trim() }
+            if ($line -match "^OLLAMA_BASE_URL=(.+)$") { $ollamaBaseUrl = $Matches[1].Trim() }
+            if ($line -match "^OLLAMA_MODEL=(.+)$") { $ollamaModel = $Matches[1].Trim() }
         }
         Write-Host "[OK] .env.local を読み込みました。" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "[警告] .env.local が見つかりません。デフォルト設定で起動します。" -ForegroundColor Yellow
         Write-Host "       必要に応じて.env.localを作成し各種キーを記載してください。" -ForegroundColor Gray
     }
@@ -45,7 +46,8 @@ window.APP_CONFIG = {
 
     if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
         Write-Host "`n[エラー] npx コマンドが見つかりません。Node.jsがインストールされているか確認してください。" -ForegroundColor Red
-    } else {
+    }
+    else {
         Write-Host "`nローカルサーバーを起動しています..." -ForegroundColor Cyan
         Write-Host "起動完了後、画面に表示される URL (Local: http://localhost:...) へブラウザでアクセスしてください。" -ForegroundColor Green
         Write-Host "`nサーバーを停止するにはこのウィンドウを閉じるか Ctrl+C を押してください。" -ForegroundColor Gray
@@ -53,7 +55,8 @@ window.APP_CONFIG = {
 
         npx -y serve@latest . -l 3000
     }
-} catch {
+}
+catch {
     Write-Host "`n[エラー] 予期せぬエラーが発生しました。" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
 }
