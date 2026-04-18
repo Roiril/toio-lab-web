@@ -19,8 +19,20 @@ try {
         Write-Host "[OK] Ollamaのインストール完了。" -ForegroundColor Green
     } else {
         Write-Host "Ollamaのアップデートがあるか確認しています (winget)..." -ForegroundColor Gray
-        & winget upgrade Ollama.Ollama --accept-source-agreements --accept-package-agreements
-        Write-Host "[OK] Ollama本体の確認完了。" -ForegroundColor Green
+        $upgradeOutput = & winget upgrade --query Ollama.Ollama 2>&1 | Out-String
+        if ($upgradeOutput -match "Ollama\.Ollama") {
+            Write-Host "Ollamaのアップデートが見つかりました。" -ForegroundColor Yellow
+            $doUpgrade = Read-Host "アップデートしますか？ [Y/N]"
+            if ($doUpgrade -match '^[Yy]') {
+                & winget upgrade Ollama.Ollama --accept-source-agreements --accept-package-agreements
+                if ($LASTEXITCODE -ne 0) { throw "Ollamaのアップデートに失敗しました。(ExitCode: $LASTEXITCODE)" }
+                Write-Host "[OK] Ollamaのアップデートが完了しました。" -ForegroundColor Green
+            } else {
+                Write-Host "[スキップ] アップデートをスキップしました。" -ForegroundColor Gray
+            }
+        } else {
+            Write-Host "[OK] Ollamaは最新です。" -ForegroundColor Green
+        }
     }
 
     # [2/4] ファイアウォール設定と環境変数の設定
