@@ -76,13 +76,14 @@
 | :--- | :--- | :--- |
 | `think` | 段階的な思考や計画の作成 | `thought` (string) |
 | `get_position` | 最新の位置と端までの余裕を取得 | - |
-| `move_forward` | 指定速度・時間で前進 | `speed`, `duration_ms` |
-| `move_backward` | 指定速度・時間で後退 | `speed`, `duration_ms` |
-| `turn` | 左または右に指定時間回転 | `direction`, `duration_ms` |
+| `move_to` | 指定した絶対座標および角度へ移動 | `x`, `y`, `angle` |
+| `move_path` | 複数座標を順番に経由する移動 | `waypoints` (array) |
 | `spin` | 中心軸で回転（ダンス等） | `direction`, `duration_ms` |
 | `stop` | 全ての移動を即座に停止 | - |
 | `set_light` | キューブの LED 色を変更 | `red`, `green`, `blue`, `duration_ms` |
-| `play_sound` | 効果音やMIDI音を再生 | `note_id`, `duration_ms` |
+| `set_light_pattern` | 複数色のLEDアニメーションパターン再生 | `frames` (array), `repetitions` |
+| `play_sound` | 効果音やMIDI音を再生 (単音) | `note_id`, `duration_ms` |
+| `play_melody` | 複数のMIDI音符を指定時間で連続再生 | `notes` (array) |
 | `wait` | 指定時間待機 | `duration_ms` |
 | `get_battery` | バッテリー残量(0-100)を取得 | - |
 

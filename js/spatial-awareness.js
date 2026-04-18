@@ -183,8 +183,29 @@ class SpatialAwareness {
         return [
             `現在位置: (${cubeX}, ${cubeY}), 角度: ${cubeAngle}°`,
             `端までの余裕: 上${margins.top}単位 / 下${margins.bottom}単位 / 左${margins.left}単位 / 右${margins.right}単位`,
+            this.getLandmarkInfo(cubeX, cubeY),
             // 警告を追加（落下防止）
             (margins.top < 30 || margins.bottom < 30 || margins.left < 30 || margins.right < 30) ? `⚠️ 警告: マット端に接近しています。慎重に移動してください。` : ""
         ].filter(Boolean).join('\n');
+    }
+
+    // A-5: 座標に対する大まかな位置（ランドマーク）情報を返す
+    getLandmarkInfo(x, y) {
+        const { min: xMin, max: xMax } = this.mat.coordRange.x;
+        const { min: yMin, max: yMax } = this.mat.coordRange.y;
+
+        const xThird = (xMax - xMin) / 3;
+        const yThird = (yMax - yMin) / 3;
+
+        let xArea = "中央";
+        if (x < xMin + xThird) xArea = "左側";
+        else if (x > xMax - xThird) xArea = "右側";
+
+        let yArea = "中央部";
+        if (y < yMin + yThird) yArea = "上部";
+        else if (y > yMax - yThird) yArea = "下部";
+
+        if (xArea === "中央" && yArea === "中央部") return "中央付近";
+        return `${xArea}${yArea}エリア`;
     }
 }

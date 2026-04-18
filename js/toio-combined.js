@@ -47,11 +47,29 @@ class ToioCombined {
         ]);
     }
 
-    async moveTo(x, y, angle) {
+    async playMelody(notes) {
         await Promise.all([
-            this.sim.moveTo(x, y, angle),
-            this.ble.isConnected ? this.ble.moveTo(x, y, angle) : Promise.resolve()
+            this.sim.playMelody(notes),
+            this.ble.isConnected && this.ble.playMelody ? this.ble.playMelody(notes) : Promise.resolve()
         ]);
+    }
+
+    async setLightPattern(frames, repetitions) {
+        await Promise.all([
+            this.sim.setLightPattern(frames, repetitions),
+            this.ble.isConnected && this.ble.setLightPattern ? this.ble.setLightPattern(frames, repetitions) : Promise.resolve()
+        ]);
+    }
+
+    async moveTo(x, y, angle) {
+        const [, bleResult] = await Promise.all([
+            this.sim.moveTo(x, y, angle),
+            this.ble.isConnected ? this.ble.moveTo(x, y, angle) : Promise.resolve(null)
+        ]);
+        // Return BLE result when connected; otherwise synthesize a success result from sim
+        return this.ble.isConnected && bleResult !== null
+            ? bleResult
+            : { result: 0x00, resultStr: "Success" };
     }
 
     async getBattery() {

@@ -6,23 +6,15 @@ class Environment {
     }
 
     getSnapshot() {
-        let x, y, angle;
-        let isMoving = this.ble.isMoving || this.sim.isMoving;
-        
-        if (this.ble.isConnected) {
-            x = this.ble.x;
-            y = this.ble.y;
-            angle = this.ble.angle;
-        } else {
-            const pos = this.sim.getPosition();
-            x = pos.x;
-            y = pos.y;
-            angle = pos.angle;
-        }
+        // Sim position is always authoritative — it reflects completed moves synchronously.
+        // BLE Notification updates arrive asynchronously and may lag behind the physical cube,
+        // causing stale coordinates when snapshots are taken immediately after a moveTo.
+        const pos = this.sim.getPosition();
+        const isMoving = this.ble.isMoving || this.sim.isMoving;
 
         return {
-            cube: { x, y, angle, isConnected: this.ble.isConnected, isMoving }, // Note: battery might require async fetch, so we skip here
-            spatial: this.spatial.getDynamicContext(x, y, angle),
+            cube: { x: pos.x, y: pos.y, angle: pos.angle, isConnected: this.ble.isConnected, isMoving },
+            spatial: this.spatial.getDynamicContext(pos.x, pos.y, pos.angle),
             timestamp: Date.now()
         };
     }

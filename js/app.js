@@ -11,7 +11,9 @@ document.addEventListener("DOMContentLoaded", () => {
     
     const ollamaStatusDot = document.getElementById("ollama-status-dot");
     const ollamaStatusText = document.getElementById("ollama-status-text");
-    
+    const geminiApiKeyInput = document.getElementById("gemini-api-key");
+    const geminiModelInput = document.getElementById("gemini-model");
+
     const toioStatusDot = document.getElementById("toio-status-dot");
     const toioStatusText = document.getElementById("toio-status-text");
     const cubeInfo = document.getElementById("cube-info");
@@ -23,8 +25,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const settingsModal = document.getElementById("settings-modal");
     const closeSettingsBtn = document.getElementById("close-settings-btn");
     const saveSettingsBtn = document.getElementById("save-settings-btn");
-    const ollamaUrlInput = document.getElementById("ollama-url");
-    const ollamaModelInput = document.getElementById("ollama-model");
     const maxIterationsInput = document.getElementById("max-iterations");
     const clearMemoryBtn = document.getElementById("clear-memory-btn");
 
@@ -32,18 +32,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const spatialAwareness = new SpatialAwareness();
     const toioBle = new ToioBLE();
     const toioSim = new ToioSim(spatialAwareness);
-    
+
     const combinedToio = new ToioCombined(toioSim, toioBle);
 
-    // Setup URL from dynamic config if available
-    const defaultUrl = window.APP_CONFIG?.OLLAMA_URL || "http://localhost:11434";
-    ollamaUrlInput.value = defaultUrl;
+    // API キーは config.js (= .env.local 由来) から読み込む
+    const savedApiKey = window.APP_CONFIG?.GEMINI_API_KEY || localStorage.getItem('gemini_api_key') || '';
+    const savedModel = window.APP_CONFIG?.GEMINI_MODEL || localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
+    if (geminiApiKeyInput) geminiApiKeyInput.value = savedApiKey;
+    if (geminiModelInput) geminiModelInput.value = savedModel;
 
-    let ollama = new OllamaClient(defaultUrl);
+    let llmClient = new GeminiClient(savedApiKey, savedModel);
     const sessionMemory = new SessionMemory();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
     const executor = new ToolExecutor(combinedToio, environment);
-    
+
     // UI state
     let isAgentRunning = false;
     let isProcessingChat = false;
@@ -51,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let hasSyncedInitialPosition = false;
 
     // Agent Loop initialization
-    let agentLoop = new AgentLoop(ollama, executor, environment, sessionMemory, spatialAwareness, {
+    let agentLoop = new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
         maxIterations: parseInt(maxIterationsInput.value, 10),
         onStep: handleAgentStep
     });
@@ -97,7 +99,12 @@ document.addEventListener("DOMContentLoaded", () => {
     toioBle.onDisconnectCallback = () => {
         updateToioUIState();
         hasSyncedInitialPosition = false;
-        addMessage("system", "toioキューブが切断されました。");
+        addMessage("system", "toioキューブが切断されました。自動再接続を試みています...");
+    };
+
+    toioBle.onReconnectCallback = () => {
+        updateToioUIState();
+        addMessage("system", "toioキューブに再接続しました。");
     };
 
     toioBle.onBatteryUpdateCallback = (batt) => {
@@ -151,16 +158,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     saveSettingsBtn.addEventListener('click', () => {
-        const newUrl = ollamaUrlInput.value.trim();
-        const newModel = ollamaModelInput.value.trim();
-        ollama = new OllamaClient(newUrl, newModel);
-        
+        const newApiKey = geminiApiKeyInput.value.trim();
+        const newModel = geminiModelInput.value.trim() || 'gemini-2.5-flash';
+        localStorage.setItem('gemini_api_key', newApiKey);
+        localStorage.setItem('gemini_model', newModel);
+        llmClient = new GeminiClient(newApiKey, newModel);
+
         // Re-init agent loop
-        agentLoop = new AgentLoop(ollama, executor, environment, sessionMemory, spatialAwareness, {
+        agentLoop = new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
             maxIterations: parseInt(maxIterationsInput.value, 10) || 10,
             onStep: handleAgentStep
         });
-        
+
         settingsModal.classList.remove('active');
         checkOllamaConnection();
     });
@@ -192,14 +201,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function checkOllamaConnection() {
-        ollamaStatusText.innerText = "Ollama: Checking...";
-        const ok = await ollama.checkConnection();
+        ollamaStatusText.innerText = "Gemini: Checking...";
+        const { ok, reason } = await llmClient.checkConnection();
         if (ok) {
             ollamaStatusDot.className = "dot connected";
-            ollamaStatusText.innerText = `Ollama: Ready (${ollama.model})`;
+            ollamaStatusText.innerText = `Gemini: Ready (${llmClient.model})`;
         } else {
             ollamaStatusDot.className = "dot disconnected";
-            ollamaStatusText.innerText = "Ollama: Error (CORS or Off)";
+            ollamaStatusText.innerText = `Gemini: Error — ${reason}`;
         }
     }
 
@@ -214,7 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
         addMessage("user", text);
 
         try {
-            await agentLoop.run(text, toioTools);
+            await agentLoop.run(text, agentTools);
         } catch (e) {
             addMessage("system", "エラーが発生しました: " + e.message);
         } finally {
@@ -246,19 +255,17 @@ document.addEventListener("DOMContentLoaded", () => {
         if (step.type === 'thinking') {
             if (currentThinkingNode) {
                 const currentText = currentThinkingNode.querySelector('.message-content').innerText;
-                // If message changed significantly, finalize old one and start new
                 if (!currentText.includes(step.message)) {
                     currentThinkingNode.classList.remove('thinking');
-                    currentThinkingNode = renderSystemMessage(`🤔 ${step.message}`, stepContextText, true);
+                    currentThinkingNode = renderSystemMessage(step.message, stepContextText, true);
                 } else {
-                    // Update in place if it's the same base message
                     currentThinkingNode.querySelector('.message-content').innerHTML = `
                         <div class="step-header">${stepContextText}</div>
-                        🤔 ${step.message}
+                        ${step.message}
                     `;
                 }
             } else {
-                currentThinkingNode = renderSystemMessage(`🤔 ${step.message}`, stepContextText, true);
+                currentThinkingNode = renderSystemMessage(step.message, stepContextText, true);
             }
             scrollChat();
             return;
@@ -274,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
             case 'planned':
                 let tasksHtml = `<div class="task-list-container">`;
                 if (step.plan.reasoning) {
-                    tasksHtml += `<div class="plan-reasoning">📋 ${escapeHTML(step.plan.reasoning)}</div>`;
+                    tasksHtml += `<div class="plan-reasoning">${escapeHTML(step.plan.reasoning)}</div>`;
                 }
                 tasksHtml += `<ul class="plan-tasks">`;
                 tasksHtml += step.plan.tasks.map(t => `<li><span class="task-bullet"></span> ${escapeHTML(t.description)}</li>`).join("");
@@ -286,7 +293,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     addMessage("ai", step.content);
                 }
                 let toolsHtml = step.toolCalls.map(tc => {
-                    return `🔧 <span style="font-weight:bold">${tc.function.name}</span>(${JSON.stringify(tc.function.arguments)})`;
+                    return `<span style="font-weight:bold">${tc.function.name}</span>(${JSON.stringify(tc.function.arguments)})`;
                 }).join("<br>");
                 renderSystemMessage(`<div class="tool-call-block">${toolsHtml}</div>`, stepContextText, false);
                 break;
@@ -296,7 +303,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 break;
             case 'error':
-                renderSystemMessage(`⚠️ エラー発生: ${step.error}`, stepContextText, false);
+                renderSystemMessage(`error: ${step.error}`, stepContextText, false);
                 break;
         }
         scrollChat();

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>toio Lab Web - Gemma4 Controller</title>
+    <title>toio Lab Web - Gemini Controller</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono&display=swap" rel="stylesheet">
@@ -18,7 +18,6 @@
         <!-- Header -->
         <header class="glass-panel">
             <div class="logo">
-                <span class="logo-emoji">🤖</span>
                 <h1>toio Lab</h1>
             </div>
             <div class="header-controls">
@@ -33,7 +32,7 @@
                     <h2>LLM Connection</h2>
                     <div class="status-indicator">
                         <span id="ollama-status-dot" class="dot disconnected"></span>
-                        <span id="ollama-status-text">Ollama: Checking...</span>
+                        <span id="ollama-status-text">Gemini: Checking...</span>
                     </div>
                 </section>
 
@@ -69,9 +68,9 @@
                 <div class="chat-history" id="chat-history">
                     <div class="message system">
                         <div class="message-content">
-                            こんにちは！Gemma4を搭載したtoioコントローラーです。<br>
+                            toio Lab - Gemini 2.5 Flash<br>
                             「前に少し進んで」「青色に光らせて」などの言葉で操作できます。<br>
-                            まずは左のパネルからtoioと接続してください。
+                            実機を使う場合は左のパネルから接続してください。
                         </div>
                     </div>
                 </div>
@@ -99,12 +98,12 @@
         <div class="modal-content glass-panel">
             <h2>設定</h2>
             <div class="form-group">
-                <label for="ollama-url">Ollama URL</label>
-                <input type="text" id="ollama-url" value="http://localhost:11434">
+                <label for="gemini-api-key">Gemini API Key</label>
+                <input type="password" id="gemini-api-key" placeholder="AIza...">
             </div>
             <div class="form-group">
-                <label for="ollama-model">Model</label>
-                <input type="text" id="ollama-model" value="gemma4:e4b">
+                <label for="gemini-model">Model</label>
+                <input type="text" id="gemini-model" value="gemini-2.5-flash">
             </div>
             <div class="form-group">
                 <label for="max-iterations" title="自律行動の最大ステップ数。数字が大きいほど複雑なタスクをこなせますが、時間がかかります。">最大ステップ数 (Max Iterations) ℹ️</label>
@@ -128,7 +127,7 @@
     <script src="js/toio-sim.js"></script>
     <script src="js/toio-combined.js"></script>
     <script src="js/environment.js"></script>
-    <script src="js/ollama-client.js"></script>
+    <script src="js/gemini-client.js"></script>
     <script src="js/tools-schema.js"></script>
     <script src="js/tool-executor.js"></script>
     <script src="js/agent-loop.js"></script>

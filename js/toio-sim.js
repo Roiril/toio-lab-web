@@ -21,7 +21,8 @@ class ToioSim {
         
         // Simulation loop
         this.lastTime = performance.now();
-        requestAnimationFrame(this._update.bind(this));
+        this._boundUpdate = this._update.bind(this);
+        requestAnimationFrame(this._boundUpdate);
         
         this._render();
     }
@@ -72,15 +73,17 @@ class ToioSim {
                 this.y = matY;
                 this.angle = angle;
                 this._render();
-                resolve(0x00);
+                resolve({result: 0x00, resultStr: "Success"});
             }, delayMs);
         });
     }
 
     // --- Coordinate Mapping ---
     matToSim(matX, matY) {
-        const matMinX = 98, matMaxX = 402;
-        const matMinY = 142, matMaxY = 358;
+        const matMinX = this.spatial ? this.spatial.mat.coordRange.x.min : 98;
+        const matMaxX = this.spatial ? this.spatial.mat.coordRange.x.max : 402;
+        const matMinY = this.spatial ? this.spatial.mat.coordRange.y.min : 142;
+        const matMaxY = this.spatial ? this.spatial.mat.coordRange.y.max : 358;
         const simW = this.matElement?.clientWidth || 700;
         const simH = this.matElement?.clientHeight || 500;
 
@@ -90,8 +93,10 @@ class ToioSim {
     }
 
     simToMat(simX, simY) {
-        const matMinX = 98, matMaxX = 402;
-        const matMinY = 142, matMaxY = 358;
+        const matMinX = this.spatial ? this.spatial.mat.coordRange.x.min : 98;
+        const matMaxX = this.spatial ? this.spatial.mat.coordRange.x.max : 402;
+        const matMinY = this.spatial ? this.spatial.mat.coordRange.y.min : 142;
+        const matMaxY = this.spatial ? this.spatial.mat.coordRange.y.max : 358;
         const simW = this.matElement?.clientWidth || 700;
         const simH = this.matElement?.clientHeight || 500;
 
@@ -116,6 +121,32 @@ class ToioSim {
             setTimeout(() => this.cubeElement.classList.remove('pulse'), 200);
         }
         return new Promise(resolve => setTimeout(resolve, durationMs));
+    }
+
+    async playMelody(notes) {
+        if (!notes || notes.length === 0) return;
+        const totalDuration = notes.reduce((sum, n) => sum + (n.duration_ms || 300), 0);
+        if (this.cubeElement) {
+            this.cubeElement.classList.add('pulse');
+            setTimeout(() => this.cubeElement.classList.remove('pulse'), totalDuration);
+        }
+        return new Promise(resolve => setTimeout(resolve, totalDuration));
+    }
+
+    async setLightPattern(frames, repetitions = 1) {
+        if (!frames || frames.length === 0) return;
+        const singleDur = frames.reduce((sum, f) => sum + (f.duration_ms || 100), 0);
+        const totalDuration = singleDur * repetitions;
+        if (this.cubeElement) {
+            // Simplified mock: just show the first frame's color and add a pulse effect
+            const r = frames[0].red || 0;
+            const g = frames[0].green || 0;
+            const b = frames[0].blue || 0;
+            const color = `rgb(${r}, ${g}, ${b})`;
+            this.cubeElement.style.borderTop = `4px solid ${color}`;
+            this.cubeElement.style.boxShadow = `0 0 10px ${color}`;
+        }
+        return new Promise(resolve => setTimeout(resolve, totalDuration));
     }
 
     async getBattery() {
@@ -162,7 +193,7 @@ class ToioSim {
             this._render();
         }
 
-        requestAnimationFrame(this._update.bind(this));
+        requestAnimationFrame(this._boundUpdate);
     }
 
     _render() {

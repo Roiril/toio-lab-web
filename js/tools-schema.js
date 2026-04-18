@@ -64,74 +64,92 @@ const toioTools = [
     {
       "type": "function",
       "function": {
-        "name": "move_forward",
-        "description": "Move the toio cube forward. Useful for 'go forward', 'move ahead', 'advance'.",
+        "name": "play_melody",
+        "description": "Play a sequence of musical notes on the toio cube.",
         "parameters": {
           "type": "object",
           "properties": {
-            "speed": {
-              "type": "integer",
-              "description": "Speed from 10 to 100. Default is 50.",
-              "minimum": 10,
-              "maximum": 100
-            },
-            "duration_ms": {
-              "type": "integer",
-              "description": "Duration to move in milliseconds (e.g., 500, 1000, 2000). Max 2500.",
-              "minimum": 100,
-              "maximum": 2500
+            "notes": {
+              "type": "array",
+              "description": "Array of notes to play. Max 59 notes.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "integer",
+                    "description": "MIDI Note ID (e.g. 60=C4, 62=D4).",
+                    "minimum": 0,
+                    "maximum": 127
+                  },
+                  "duration_ms": {
+                    "type": "integer",
+                    "description": "Duration to play this note in milliseconds.",
+                    "minimum": 10,
+                    "maximum": 2500
+                  }
+                },
+                "required": ["note", "duration_ms"]
+              }
             }
           },
-          "required": ["duration_ms"]
+          "required": ["notes"]
         }
       }
     },
     {
       "type": "function",
       "function": {
-        "name": "move_backward",
-        "description": "Move the toio cube backward.",
+        "name": "move_path",
+        "description": "Move the toio cube along a path of multiple coordinates sequentially.",
         "parameters": {
           "type": "object",
           "properties": {
-            "speed": {
-              "type": "integer",
-              "description": "Speed from 10 to 100.",
-              "minimum": 10,
-              "maximum": 100
-            },
-            "duration_ms": {
-              "type": "integer",
-              "description": "Duration to move in milliseconds. Max 2500.",
-              "minimum": 100,
-              "maximum": 2500
+            "waypoints": {
+              "type": "array",
+              "description": "Array of coordinates to visit in order.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": { "type": "integer", "description": "Target X coordinate." },
+                  "y": { "type": "integer", "description": "Target Y coordinate." }
+                },
+                "required": ["x", "y"]
+              }
             }
           },
-          "required": ["duration_ms"]
+          "required": ["waypoints"]
         }
       }
     },
     {
       "type": "function",
       "function": {
-        "name": "turn",
-        "description": "Turn the cube left or right.",
+        "name": "set_light_pattern",
+        "description": "Play an animated light pattern with multiple colors on the toio cube.",
         "parameters": {
           "type": "object",
           "properties": {
-            "direction": {
-              "type": "string",
-              "enum": ["left", "right"],
-              "description": "Direction to turn."
-            },
-            "duration_ms": {
+            "repetitions": {
               "type": "integer",
-              "description": "Duration to turn in milliseconds. Around 200-500 is good for 90 degrees.",
-              "minimum": 100,
-              "maximum": 2500
+              "description": "Number of times to repeat the pattern. 0 means infinite.",
+              "default": 1
+            },
+            "frames": {
+              "type": "array",
+              "description": "Sequence of light frames. Max 29 frames.",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "duration_ms": { "type": "integer", "description": "Duration for this color in ms." },
+                  "red": { "type": "integer", "minimum": 0, "maximum": 255 },
+                  "green": { "type": "integer", "minimum": 0, "maximum": 255 },
+                  "blue": { "type": "integer", "minimum": 0, "maximum": 255 }
+                },
+                "required": ["duration_ms", "red", "green", "blue"]
+              }
             }
           },
-          "required": ["direction", "duration_ms"]
+          "required": ["frames"]
         }
       }
     },
@@ -244,5 +262,5 @@ const toioTools = [
  * We prioritize move_to for all movement tasks.
  */
 const agentTools = toioTools.filter(t => 
-    ["move_to", "get_position", "stop", "set_light", "play_sound", "wait", "get_battery", "spin"].includes(t.function.name)
+    ["move_to", "get_position", "stop", "set_light", "play_sound", "wait", "get_battery", "spin", "think", "play_melody", "move_path", "set_light_pattern"].includes(t.function.name)
 );

@@ -7,6 +7,16 @@ class ToolExecutor {
         this.env = environment; // for get_position
     }
 
+    async _retryOnce(operationFn, desc) {
+        try {
+            return await operationFn();
+        } catch (e) {
+            console.warn(`[Retry] ${desc} failed, retrying once...`, e);
+            await new Promise(r => setTimeout(r, 100)); // wait brief moment before retry
+            return await operationFn();
+        }
+    }
+
     async executeAll(toolCalls) {
         const results = [];
         
@@ -22,7 +32,7 @@ class ToolExecutor {
 
             try {
                 // Connection checks
-                const needsConnection = ["move_forward", "move_backward", "turn", "spin", "set_light", "play_sound", "get_battery", "stop", "move_to"];
+                const needsConnection = ["spin", "set_light", "play_sound", "get_battery", "stop", "move_to", "play_melody", "move_path", "set_light_pattern"];
                 if (needsConnection.includes(funcName) && !this.toio.isConnected) {
                     throw new Error("Cube is not connected or simulator is unavailable.");
                 }
@@ -33,128 +43,85 @@ class ToolExecutor {
                         resultData = { status: "success", thought_recorded: true };
                         break;
                         
-                    case "get_position":
+                    case "get_position": {
                         if (!this.env) throw new Error("Environment not provided to ToolExecutor");
-                        // Return the environment snapshot, which includes position and spatial info
                         const snap = this.env.getSnapshot();
+                        let landmarkInfo = "";
+                        if (this.env.spatial && this.env.spatial.getLandmarkInfo) {
+                            landmarkInfo = this.env.spatial.getLandmarkInfo(snap.cube.x, snap.cube.y);
+                            snap.landmark = landmarkInfo;
+                        }
                         resultData = { status: "success", state: snap };
                         break;
+                    }
                         
-                    case "wait":
+                    case "wait": {
                         await new Promise(r => setTimeout(r, args.duration_ms || 1000));
                         resultData = { status: "success", desc: `Waited for ${args.duration_ms}ms` };
                         break;
+                    }
                         
-                    case "stop":
-                        await this.toio.stop();
-                        resultData = { status: "success", desc: "Stopped all movement" };
-                        break;
-
-                    case "move_forward": {
-                        const fwdSpeed = args.speed || 50;
-                        let fwdDuration = args.duration_ms;
-                        let fwdClamped = false;
-
-                        // 安全チェック: 移動距離がマット端を超えないか
-                        if (this.env) {
-                            const snap = this.env.getSnapshot();
-                            const estimatedDist = this.env.spatial.estimateMoveDistance(fwdSpeed, fwdDuration);
-                            const safeDist = this.env.spatial.getSafeDistance(snap.cube.x, snap.cube.y, snap.cube.angle);
-                            
-                            if (estimatedDist > safeDist && safeDist > 0) {
-                                // 安全な時間に短縮
-                                const safeRatio = safeDist / estimatedDist;
-                                fwdDuration = Math.max(100, Math.floor(fwdDuration * safeRatio * 0.9)); // 10%の安全マージンを追加
-                                fwdClamped = true;
-                                console.log(`[Safety] move_forward clamped: ${args.duration_ms}ms → ${fwdDuration}ms (estimated ${Math.round(estimatedDist)} units, safe ${Math.round(safeDist)} units)`);
-                            } else if (safeDist <= 0) {
-                                // 既にマージン内にいる場合は最小時間に
-                                fwdDuration = 100;
-                                fwdClamped = true;
-                                console.log(`[Safety] move_forward: already at margin, limiting to 100ms`);
-                            }
-                        }
-
-                        await this.toio.move(fwdSpeed, fwdSpeed, fwdDuration);
-                        let fwdDesc = `Moved forward for ${fwdDuration}ms`;
-                        if (fwdClamped) {
-                            fwdDesc += `. ⚠️ マット端に近いため、移動距離を制限しました（元の指定: ${args.duration_ms}ms → ${fwdDuration}ms）。`;
-                        }
-                        resultData = { status: "success", desc: fwdDesc, clamped: fwdClamped };
+                    case "stop": {
+                        await this._retryOnce(() => this.toio.stop(), "stop");
+                        const afterSnap = this.env ? this.env.getSnapshot() : {};
+                        resultData = { status: "success", desc: "Stopped all movement", after_state: afterSnap.cube };
                         break;
                     }
                         
-                    case "move_backward": {
-                        const bwdSpeed = args.speed || 50;
-                        let bwdDuration = args.duration_ms;
-                        let bwdClamped = false;
-
-                        // 安全チェック: 後退方向の距離をチェック
-                        if (this.env) {
-                            const snap = this.env.getSnapshot();
-                            const estimatedDist = this.env.spatial.estimateMoveDistance(bwdSpeed, bwdDuration);
-                            const safeDist = this.env.spatial.getSafeDistance(snap.cube.x, snap.cube.y, snap.cube.angle, true);
-                            
-                            if (estimatedDist > safeDist && safeDist > 0) {
-                                const safeRatio = safeDist / estimatedDist;
-                                bwdDuration = Math.max(100, Math.floor(bwdDuration * safeRatio * 0.9));
-                                bwdClamped = true;
-                                console.log(`[Safety] move_backward clamped: ${args.duration_ms}ms → ${bwdDuration}ms`);
-                            } else if (safeDist <= 0) {
-                                bwdDuration = 100;
-                                bwdClamped = true;
-                                console.log(`[Safety] move_backward: already at margin, limiting to 100ms`);
-                            }
-                        }
-
-                        await this.toio.move(-bwdSpeed, -bwdSpeed, bwdDuration);
-                        let bwdDesc = `Moved backward for ${bwdDuration}ms`;
-                        if (bwdClamped) {
-                            bwdDesc += `. ⚠️ マット端に近いため、移動距離を制限しました（元の指定: ${args.duration_ms}ms → ${bwdDuration}ms）。`;
-                        }
-                        resultData = { status: "success", desc: bwdDesc, clamped: bwdClamped };
-                        break;
-                    }
-                        
-                    case "turn":
-                        const s = args.speed || 50;
-                        if (args.direction === "left") {
-                            await this.toio.move(-s, s, args.duration_ms);
-                        } else {
-                            await this.toio.move(s, -s, args.duration_ms);
-                        }
-                        resultData = { status: "success", desc: `Turned ${args.direction} for ${args.duration_ms}ms` };
-                        break;
-                        
-                    case "spin":
+                    case "spin": {
                         const spd = args.speed || 80;
-                        await this.toio.spin(spd, args.duration_ms, args.direction || "cw");
-                        resultData = { status: "success", desc: `Spun ${args.direction || "cw"} for ${args.duration_ms}ms` };
+                        await this._retryOnce(() => this.toio.spin(spd, args.duration_ms, args.direction || "cw"), "spin");
+                        const afterSnap = this.env ? this.env.getSnapshot() : {};
+                        resultData = { status: "success", desc: `Spun ${args.direction || "cw"} for ${args.duration_ms}ms`, after_state: afterSnap.cube };
                         break;
+                    }
 
-                    case "set_light":
-                        await this.toio.setLight(args.red, args.green, args.blue, args.duration_ms || 0);
+                    case "set_light": {
+                        await this._retryOnce(() => this.toio.setLight(args.red, args.green, args.blue, args.duration_ms || 0), "set_light");
                         resultData = { status: "success", color: `rgb(${args.red},${args.green},${args.blue})` };
                         break;
+                    }
 
-                    case "play_sound":
-                        await this.toio.playSound(args.note_id || 60, args.duration_ms);
+                    case "play_sound": {
+                        await this._retryOnce(() => this.toio.playSound(args.note_id || 60, args.duration_ms), "play_sound");
                         resultData = { status: "success", played_note: args.note_id || 60 };
                         break;
+                    }
+                    
+                    case "play_melody": {
+                        if (this.toio.playMelody) {
+                            await this._retryOnce(() => this.toio.playMelody(args.notes), "play_melody");
+                            resultData = { status: "success", desc: `Played melody with ${args.notes.length} notes` };
+                        } else {
+                            resultData = { status: "error", error: "play_melody not supported by current interface" };
+                        }
+                        break;
+                    }
 
-                    case "get_battery":
-                        const batt = await this.toio.getBattery();
+                    case "set_light_pattern": {
+                        if (this.toio.setLightPattern) {
+                            await this._retryOnce(() => this.toio.setLightPattern(args.frames, args.repetitions || 1), "set_light_pattern");
+                            resultData = { status: "success", desc: `Played light pattern with ${args.frames.length} frames (${args.repetitions} reps)` };
+                        } else {
+                            resultData = { status: "error", error: "set_light_pattern not supported by current interface" };
+                        }
+                        break;
+                    }
+
+                    case "get_battery": {
+                        const batt = await this._retryOnce(() => this.toio.getBattery(), "get_battery");
                         resultData = { status: "success", battery_percentage: batt };
                         break;
+                    }
                         
-                    case "move_to":
+                    case "move_to": {
                         // 安全範囲に制限（クランプ）
                         const safePos = this.env.spatial.clampToSafeRange(args.x, args.y);
                         const isClamped = (safePos.x !== args.x || safePos.y !== args.y);
                         if (isClamped) {
                             console.log(`Clamping move_to from (${args.x}, ${args.y}) to safe position (${safePos.x}, ${safePos.y})`);
                         }
-                        const moveRes = await this.toio.moveTo(safePos.x, safePos.y, args.angle || 0);
+                        const moveRes = await this._retryOnce(() => this.toio.moveTo(safePos.x, safePos.y, args.angle || 0), "move_to");
                         
                         // ✅ Get actual position after movement
                         const afterSnap = this.env.getSnapshot();
@@ -174,9 +141,35 @@ class ToolExecutor {
                             desc: desc,
                             arrived_at: arrivedAt,
                             original_request: { x: args.x, y: args.y },
-                            clamped: isClamped
+                            clamped_target: safePos, // エヴァリュエーター用
+                            clamped: isClamped,
+                            after_state: arrivedAt
                         };
                         break;
+                    }
+
+                    case "move_path": {
+                        if (!args.waypoints || args.waypoints.length === 0) {
+                            resultData = { status: "error", error: "No waypoints provided" };
+                            break;
+                        }
+                        let lastRes = null;
+                        for (let i = 0; i < args.waypoints.length; i++) {
+                            const wp = args.waypoints[i];
+                            const safePos = this.env.spatial.clampToSafeRange(wp.x, wp.y);
+                            lastRes = await this._retryOnce(() => this.toio.moveTo(safePos.x, safePos.y, wp.angle || 0), `move_path step ${i}`);
+                            if (lastRes && lastRes.result !== 0x00 && lastRes.result !== 0) {
+                                break; // エラーやタイムアウトで中断
+                            }
+                        }
+                        const afterSnap = this.env.getSnapshot();
+                        resultData = { 
+                            status: "success", 
+                            desc: `Executed move_path with ${args.waypoints.length} waypoints. Last result: ${lastRes?.resultStr || "OK"}`,
+                            after_state: afterSnap.cube
+                        };
+                        break;
+                    }
 
                     default:
                         resultData = { status: "error", error: `Unknown function ${funcName}` };

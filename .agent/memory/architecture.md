@@ -7,7 +7,7 @@
 | レイヤー | 技術 |
 |---|---|
 | フロントエンド | Vanilla HTML/CSS/JS（ビルドツール不要） |
-| LLM | Ollama (gemma4:4b-it) — ローカル実行 |
+| LLM | Ollama (gemma4:e4b 等) — ローカル実行 |
 | ハードウェア | toio コアキューブ — Web Bluetooth API |
 | シミュレーション | Canvas 2D ベースの toio-sim.js |
 
