@@ -336,10 +336,7 @@ class ToioBLE {
      * @param {number} angle Angle 0-360
      * @returns {Promise<{result: number, resultStr: string}>}
      */
-    async moveTo(x, y, angle = 0) {
-        if (!this.isConnected) return { result: 0xFF, resultStr: "Not connected" };
-
-        // Cancel any in-flight moveTo before issuing a new one to prevent Promise leaks
+    async _sendMoveToTarget(x, y, angle) {
         if (this._pendingMove) {
             if (this._pendingMove._timeoutId) clearTimeout(this._pendingMove._timeoutId);
             this._pendingMove.resolve({ result: 0x04, resultStr: "Interrupted by new command" });
@@ -348,19 +345,18 @@ class ToioBLE {
 
         const controlId = this._getNextControlId();
         const buf = new Uint8Array(13);
-        buf[0] = 0x03; // Targeted move
+        buf[0] = 0x03;
         buf[1] = controlId;
-        buf[2] = 0x00; // No firmware timeout; we use our own 15s timeout
-        buf[3] = 0x01; // Movement type (Target + Angle)
-        buf[4] = 0x50; // Max speed (80)
-        buf[5] = 0x00; // Speed type (Uniform speed)
-        buf[6] = 0x00; // Reserved
+        buf[2] = 0x00;
+        buf[3] = 0x01;
+        buf[4] = 0x50;
+        buf[5] = 0x00;
+        buf[6] = 0x00;
 
         const dv = new DataView(buf.buffer);
         dv.setUint16(7, x, true);
         dv.setUint16(9, y, true);
-        const normalizedAngle = ((angle % 360) + 360) % 360;
-        dv.setUint16(11, normalizedAngle, true);
+        dv.setUint16(11, ((angle % 360) + 360) % 360, true);
 
         return new Promise((resolve) => {
             const timeoutId = setTimeout(() => {
@@ -396,6 +392,35 @@ class ToioBLE {
                     resolve({ result: 0xFF, resultStr: err.message });
                 });
         });
+    }
+
+    /**
+     * Move to target coordinate in 3 sequential steps:
+     * 1. Rotate in place to face the target
+     * 2. Move straight to the target (no rotation during travel)
+     * 3. Rotate in place to the final angle
+     */
+    async moveTo(x, y, angle = 0) {
+        if (!this.isConnected) return { result: 0xFF, resultStr: "Not connected" };
+
+        const dx = x - this.x;
+        const dy = y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > 10) {
+            const bearing = Math.round(((Math.atan2(dy, dx) * 180 / Math.PI) % 360 + 360) % 360);
+
+            // Step 1: Rotate in place to face target
+            const r1 = await this._sendMoveToTarget(this.x, this.y, bearing);
+            if (r1.result === 0x04) return r1;
+
+            // Step 2: Move straight to target (already facing the right direction, no rotation)
+            const r2 = await this._sendMoveToTarget(x, y, bearing);
+            if (r2.result === 0x04) return r2;
+        }
+
+        // Step 3: Rotate in place to final angle
+        return await this._sendMoveToTarget(x, y, angle);
     }
 
     // --- Indicator Control ---

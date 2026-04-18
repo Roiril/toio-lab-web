@@ -64,19 +64,31 @@ class ToioSim {
         const dx = matX - this.x;
         const dy = matY - this.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        // Time based on distance
-        const delayMs = Math.max(500, (distance / 100) * 1000); 
-        
-        return new Promise(resolve => {
-            setTimeout(() => {
-                this.x = matX;
-                this.y = matY;
-                this.angle = angle;
-                this._render();
-                resolve({result: 0x00, resultStr: "Success"});
-            }, delayMs);
-        });
+
+        if (distance > 10) {
+            const bearing = Math.round(((Math.atan2(dy, dx) * 180 / Math.PI) % 360 + 360) % 360);
+
+            // Step 1: Rotate to face target
+            this.angle = bearing;
+            this._render();
+            await new Promise(resolve => setTimeout(resolve, 300));
+
+            // Step 2: Move straight to target
+            const moveMs = Math.max(500, (distance / 100) * 1000);
+            await new Promise(resolve => {
+                setTimeout(() => {
+                    this.x = matX;
+                    this.y = matY;
+                    this._render();
+                    resolve();
+                }, moveMs);
+            });
+        }
+
+        // Step 3: Rotate to final angle
+        this.angle = angle;
+        this._render();
+        return { result: 0x00, resultStr: "Success" };
     }
 
     // --- Coordinate Mapping ---
