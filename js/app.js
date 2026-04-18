@@ -32,7 +32,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const settingsModal = document.getElementById("settings-modal");
     const closeSettingsBtn = document.getElementById("close-settings-btn");
     const saveSettingsBtn = document.getElementById("save-settings-btn");
-    const maxIterationsInput = document.getElementById("max-iterations");
     const clearMemoryBtn = document.getElementById("clear-memory-btn");
 
     // --- State & Instances ---
@@ -88,7 +87,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Agent Loop initialization
     let agentLoop = new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
-        maxIterations: parseInt(maxIterationsInput.value, 10),
         onStep: handleAgentStep
     });
 
@@ -197,7 +195,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Re-init agent loop
         agentLoop = new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
-            maxIterations: parseInt(maxIterationsInput.value, 10) || 10,
             onStep: handleAgentStep
         });
 
@@ -305,7 +302,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function handleAgentStep(step) {
-        const stepContextText = `step ${step.iteration}/${agentLoop.maxIterations}`;
+        const stepContextText = `step ${step.iteration}`;
 
         // Handle thinking node transitions
         if (step.type === 'thinking') {

@@ -6,7 +6,6 @@ class AgentLoop {
         this.memory = sessionMemory;
         this.spatial = spatialAwareness;
 
-        this.maxIterations = options.maxIterations || 30;
         this.onStep = options.onStep || (() => {});
         this.isCancelled = false;
     }
@@ -90,7 +89,7 @@ class AgentLoop {
             this.onStep({
                 type: 'thinking',
                 iteration,
-                maxIterations: this.maxIterations,
+
                 message: "指示を解析して行動しています..."
             });
 
@@ -103,14 +102,14 @@ class AgentLoop {
             steps.push(currentResponse);
 
             // ツール呼び出しループ
-            while (currentResponse.tool_calls?.length > 0 && !this.isCancelled && iteration < this.maxIterations) {
+            while (currentResponse.tool_calls?.length > 0 && !this.isCancelled) {
                 const toolCalls = currentResponse.tool_calls;
                 iteration++;
 
                 this.onStep({
                     type: 'acting',
                     iteration,
-                    maxIterations: this.maxIterations,
+    
                     toolCalls,
                     content: currentResponse.content
                 });
@@ -123,7 +122,7 @@ class AgentLoop {
                 this.onStep({
                     type: 'thinking',
                     iteration,
-                    maxIterations: this.maxIterations,
+    
                     message: evaluation.success
                         ? `完了: ${evaluation.reasoning}`
                         : `継続中: ${evaluation.reasoning}`
@@ -146,7 +145,7 @@ class AgentLoop {
             this.onStep({
                 type: 'done',
                 iteration,
-                maxIterations: this.maxIterations,
+
                 content: finalContent
             });
 
@@ -157,7 +156,7 @@ class AgentLoop {
             this.onStep({
                 type: 'error',
                 iteration,
-                maxIterations: this.maxIterations,
+
                 error: error.message
             });
             throw error;
