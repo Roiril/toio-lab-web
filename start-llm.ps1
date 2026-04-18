@@ -9,14 +9,6 @@ try {
 
     # 設定
     $ollamaPath = "$env:LOCALAPPDATA\Programs\Ollama\ollama.exe"
-    $targetModel = "gemma4:e4b" # ユーザー指定: gemma4 の 4b (Effective 4B)
-
-    $envPath = Join-Path $PSScriptRoot ".env.local"
-    if (Test-Path $envPath) {
-        Get-Content $envPath | ForEach-Object {
-            if ($_ -match "^OLLAMA_MODEL=(.+)$") { $targetModel = $Matches[1].Trim() }
-        }
-    }
 
     # [1/4] Ollama本体のインストールとアップデート確認
     Write-Host "`n[1/4] Ollama本体の状態を確認中..." -ForegroundColor Cyan
@@ -71,17 +63,99 @@ try {
     }
     Write-Host "[OK] Ollamaサーバーが起動しました。" -ForegroundColor Green
 
-    # [4/4] AIモデルの確認とダウンロード
-    Write-Host "`n[4/4] AIモデル ($targetModel) の確認..." -ForegroundColor Cyan
-    $models = & $ollamaPath list | Out-String
-    if ($models -notmatch $targetModel) {
-        Write-Host "モデル '$targetModel' が見つかりません。ダウンロードを開始します（時間がかかる場合があります）..." -ForegroundColor Yellow
-        & $ollamaPath pull $targetModel
-        if ($LASTEXITCODE -ne 0) { throw "モデルのダウンロードに失敗しました。" }
-        Write-Host "[OK] モデルの準備が完了しました。" -ForegroundColor Green
-    } else {
-        Write-Host "[OK] モデル '$targetModel' は準備済みです。" -ForegroundColor Green
+    # [4/4] AIモデルの選択と確認
+    Write-Host "`n[4/4] AIモデルの確認と選択..." -ForegroundColor Cyan
+
+    $model_e4b = "gemma4:e4b"
+    $model_26b = "gemma4:26b"
+
+    $installedList = & $ollamaPath list | Out-String
+    $hasE4B = $installedList -match [regex]::Escape($model_e4b)
+    $has26B = $installedList -match [regex]::Escape($model_26b)
+
+    function Invoke-ModelDownload($modelName) {
+        Write-Host "`n'$modelName' をダウンロード中（時間がかかる場合があります）..." -ForegroundColor Yellow
+        & $ollamaPath pull $modelName
+        if ($LASTEXITCODE -ne 0) { throw "'$modelName' のダウンロードに失敗しました。" }
+        Write-Host "[OK] '$modelName' の準備が完了しました。" -ForegroundColor Green
     }
+
+    function Get-ModelChoice($availableModels) {
+        Write-Host "`nどちらのモデルを使用しますか？" -ForegroundColor Cyan
+        for ($i = 0; $i -lt $availableModels.Count; $i++) {
+            $label = if ($availableModels[$i] -eq $model_26b) { "$($availableModels[$i])  (26B MoE, Active 4B)" } else { $availableModels[$i] }
+            Write-Host "  $($i+1): $label" -ForegroundColor White
+        }
+        do {
+            $choice = Read-Host "番号を入力してください (1-$($availableModels.Count))"
+            $idx = [int]$choice - 1
+        } while ($idx -lt 0 -or $idx -ge $availableModels.Count)
+        return $availableModels[$idx]
+    }
+
+    if ($hasE4B -and $has26B) {
+        # 両方インストール済み
+        Write-Host "[OK] 両モデルがインストール済みです。" -ForegroundColor Green
+        Write-Host "  - $model_e4b" -ForegroundColor White
+        Write-Host "  - $model_26b  (26B MoE, Active 4B)" -ForegroundColor White
+        $targetModel = Get-ModelChoice @($model_e4b, $model_26b)
+
+    } elseif ($hasE4B -and -not $has26B) {
+        # e4b のみある
+        Write-Host "[OK] $model_e4b はインストール済みです。" -ForegroundColor Green
+        Write-Host "     $model_26b はインストールされていません。" -ForegroundColor Yellow
+        $dl = Read-Host "`n$model_26b (26B MoE, Active 4B) をダウンロードしますか？ [Y/N]"
+        if ($dl -match '^[Yy]') {
+            Invoke-ModelDownload $model_26b
+            $targetModel = Get-ModelChoice @($model_e4b, $model_26b)
+        } else {
+            $targetModel = $model_e4b
+            Write-Host "→ $targetModel を使用します。" -ForegroundColor Cyan
+        }
+
+    } elseif (-not $hasE4B -and $has26B) {
+        # 26b のみある
+        Write-Host "[OK] $model_26b (26B MoE, Active 4B) はインストール済みです。" -ForegroundColor Green
+        Write-Host "     $model_e4b はインストールされていません。" -ForegroundColor Yellow
+        $dl = Read-Host "`n$model_e4b をダウンロードしますか？ [Y/N]"
+        if ($dl -match '^[Yy]') {
+            Invoke-ModelDownload $model_e4b
+            $targetModel = Get-ModelChoice @($model_e4b, $model_26b)
+        } else {
+            $targetModel = $model_26b
+            Write-Host "→ $targetModel を使用します。" -ForegroundColor Cyan
+        }
+
+    } else {
+        # 両方ない
+        Write-Host "どちらのモデルもインストールされていません。" -ForegroundColor Yellow
+        Write-Host "  1: $model_e4b のみダウンロード" -ForegroundColor White
+        Write-Host "  2: $model_26b (26B MoE, Active 4B) のみダウンロード" -ForegroundColor White
+        Write-Host "  3: 両方ダウンロード" -ForegroundColor White
+        do {
+            $dlChoice = Read-Host "番号を入力してください (1-3)"
+        } while ($dlChoice -notmatch '^[123]$')
+
+        switch ($dlChoice) {
+            '1' {
+                Invoke-ModelDownload $model_e4b
+                $targetModel = $model_e4b
+                Write-Host "→ $targetModel を使用します。" -ForegroundColor Cyan
+            }
+            '2' {
+                Invoke-ModelDownload $model_26b
+                $targetModel = $model_26b
+                Write-Host "→ $targetModel を使用します。" -ForegroundColor Cyan
+            }
+            '3' {
+                Invoke-ModelDownload $model_e4b
+                Invoke-ModelDownload $model_26b
+                $targetModel = Get-ModelChoice @($model_e4b, $model_26b)
+            }
+        }
+    }
+
+    Write-Host "`n使用モデル: $targetModel" -ForegroundColor Cyan
 
     # IPアドレスの取得と表示
     $ipAddresses = @((Get-NetIPAddress -AddressFamily IPv4 -Type Unicast -PrefixOrigin Dhcp,Manual | Where-Object { $_.InterfaceAlias -notmatch "(Loopback|vEthernet|WSL)" }).IPAddress)
