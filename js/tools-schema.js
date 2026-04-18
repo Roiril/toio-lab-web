@@ -131,7 +131,7 @@ const toioTools = [
           "properties": {
             "repetitions": {
               "type": "integer",
-              "description": "Number of times to repeat the pattern. 0 means infinite.",
+              "description": "Number of times to repeat the pattern. 0 = infinite loop (stays on until another light command). Defaults to 1.",
               "default": 1
             },
             "frames": {
@@ -157,7 +157,7 @@ const toioTools = [
       "type": "function",
       "function": {
         "name": "spin",
-        "description": "Spin the cube around its center. Useful when asked to 'spin', 'twirl', or 'do a dance'.",
+        "description": "Spin the cube around its center. Useful when asked to 'spin', 'twirl', or 'do a dance'. Can be called after set_light_pattern to spin while the light is on.",
         "parameters": {
           "type": "object",
           "properties": {
@@ -171,6 +171,12 @@ const toioTools = [
               "description": "Duration to spin in milliseconds.",
               "minimum": 500,
               "maximum": 2500
+            },
+            "speed": {
+              "type": "integer",
+              "description": "Spin speed 0-100. Defaults to 80 if omitted.",
+              "minimum": 0,
+              "maximum": 100
             }
           },
           "required": ["direction", "duration_ms"]
@@ -239,15 +245,15 @@ const toioTools = [
       "type": "function",
       "function": {
         "name": "move_to",
-        "description": "Move the toio cube to a specific absolute coordinate (x, y) on the mat. This is the most accurate way to reach a destination.",
+        "description": "Move the toio cube to a specific absolute coordinate (x, y) on the mat, then rotate to the specified angle. Movement is sequential: (1) rotate in place to face the target, (2) move straight to the target, (3) rotate in place to the final angle. If the result contains a 'warning' field, the target was not reached — call move_to again.",
         "parameters": {
           "type": "object",
           "properties": {
             "x": { "type": "integer", "description": "Target X coordinate on the mat." },
             "y": { "type": "integer", "description": "Target Y coordinate on the mat." },
-            "angle": { 
-                "type": "integer", 
-                "description": "Target angle in degrees (0-360). Use 0 for any or if not specified.",
+            "angle": {
+                "type": "integer",
+                "description": "Target facing angle in degrees (0-360). 0=right(+X), 90=down(+Y), 180=left(-X), 270=up(-Y). Defaults to 0 if omitted.",
                 "default": 0
             }
           },
