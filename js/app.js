@@ -96,22 +96,7 @@ document.addEventListener("DOMContentLoaded", () => {
     checkLlmConnection();
     updateToioUIState();
 
-    // --- Synchronization Loop ---
-    setInterval(() => {
-        if (isAgentRunning) return; // ✅ Agent実行中は同期を停止して干渉を防ぐ
-        if (!toioBle.isConnected || toioBle.isMoving || toioSim.isMoving) return;
-
-        const target = { x: toioSim.x, y: toioSim.y };
-        
-        const dx = Math.abs(toioBle.x - target.x);
-        const dy = Math.abs(toioBle.y - target.y);
-        const da = Math.abs(toioBle.angle - toioSim.angle) % 360;
-        const diffA = Math.min(da, 360 - da);
-
-        if (dx > 20 || dy > 20 || diffA > 15) {
-            toioBle.moveTo(target.x, target.y, toioSim.angle);
-        }
-    }, 200);
+    // Sync loop removed: sim now mirrors BLE via onIdUpdateCallback.
 
     // --- Event Listeners ---
 
@@ -146,11 +131,11 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     toioBle.onIdUpdateCallback = (pos) => {
-        // 初回接続時にシミュレーションの位置を実機に合わせる（スナップ）
+        // Always mirror sim to physical cube position for live visual display.
+        toioSim.x = pos.x;
+        toioSim.y = pos.y;
+        toioSim.angle = pos.angle;
         if (!hasSyncedInitialPosition) {
-            toioSim.x = pos.x;
-            toioSim.y = pos.y;
-            toioSim.angle = pos.angle;
             hasSyncedInitialPosition = true;
             console.log("Initial position synced from physical cube:", pos);
         }

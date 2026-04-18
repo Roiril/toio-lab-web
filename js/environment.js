@@ -6,10 +6,11 @@ class Environment {
     }
 
     getSnapshot() {
-        // Sim position is always authoritative — it reflects completed moves synchronously.
-        // BLE Notification updates arrive asynchronously and may lag behind the physical cube,
-        // causing stale coordinates when snapshots are taken immediately after a moveTo.
-        const pos = this.sim.getPosition();
+        // BLE position (from mat notifications) is authoritative when connected.
+        // Sim position is used only in simulator-only mode.
+        const pos = this.ble.isConnected
+            ? { x: this.ble.x, y: this.ble.y, angle: this.ble.angle }
+            : this.sim.getPosition();
         const isMoving = this.ble.isMoving || this.sim.isMoving;
 
         return {
