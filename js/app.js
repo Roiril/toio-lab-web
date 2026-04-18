@@ -42,12 +42,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const combinedToio = new ToioCombined(toioSim, toioBle);
 
-    // 設定は LocalStorage または config.js から読み込む
-    const savedProvider = window.APP_CONFIG?.LLM_PROVIDER || localStorage.getItem('llm_provider') || 'gemini';
-    const savedApiKey = window.APP_CONFIG?.GEMINI_API_KEY || localStorage.getItem('gemini_api_key') || '';
-    const savedGeminiModel = window.APP_CONFIG?.GEMINI_MODEL || localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
-    const savedOllamaBaseUrl = window.APP_CONFIG?.OLLAMA_BASE_URL || localStorage.getItem('ollama_base_url') || 'http://localhost:11434';
-    const savedOllamaModel = window.APP_CONFIG?.OLLAMA_MODEL || localStorage.getItem('ollama_model') || 'gemma4:e4b';
+    // LocalStorage を優先し、未設定時のみ config.js にフォールバック
+    const savedProvider = localStorage.getItem('llm_provider') || window.APP_CONFIG?.LLM_PROVIDER || 'ollama';
+    const savedApiKey = localStorage.getItem('gemini_api_key') || window.APP_CONFIG?.GEMINI_API_KEY || '';
+    const savedGeminiModel = localStorage.getItem('gemini_model') || window.APP_CONFIG?.GEMINI_MODEL || 'gemini-2.5-flash';
+    const savedOllamaBaseUrl = localStorage.getItem('ollama_base_url') || window.APP_CONFIG?.OLLAMA_URL || 'http://localhost:11434';
+    const savedOllamaModel = localStorage.getItem('ollama_model') || window.APP_CONFIG?.OLLAMA_MODEL || 'gemma4:e4b';
 
     if (llmProviderSelect) llmProviderSelect.value = savedProvider;
     if (geminiApiKeyInput) geminiApiKeyInput.value = savedApiKey;
@@ -218,6 +218,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         settingsModal.classList.remove('active');
         checkLlmConnection();
+
+        const originalText = saveSettingsBtn.textContent;
+        saveSettingsBtn.textContent = '保存しました ✓';
+        saveSettingsBtn.disabled = true;
+        setTimeout(() => {
+            saveSettingsBtn.textContent = originalText;
+            saveSettingsBtn.disabled = false;
+        }, 1500);
     });
 
     // Quick Actions were removed from UI
