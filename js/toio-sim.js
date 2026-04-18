@@ -146,7 +146,7 @@ class ToioSim {
         return Promise.resolve();
     }
 
-    async playSound(noteId = 60, durationMs = 500) {
+    async playSound(_noteId = 60, durationMs = 500) {
         if (this.cubeElement) {
             this.cubeElement.classList.add('pulse');
             setTimeout(() => this.cubeElement.classList.remove('pulse'), 200);
@@ -166,10 +166,11 @@ class ToioSim {
 
     async setLightPattern(frames, repetitions = 1) {
         if (!frames || frames.length === 0) return;
-        const singleDur = frames.reduce((sum, f) => sum + (f.duration_ms || 100), 0);
-        const totalDuration = singleDur * repetitions;
+        if (this._lightTimeoutId) {
+            clearTimeout(this._lightTimeoutId);
+            this._lightTimeoutId = null;
+        }
         if (this.cubeElement) {
-            // Simplified mock: just show the first frame's color and add a pulse effect
             const r = frames[0].red || 0;
             const g = frames[0].green || 0;
             const b = frames[0].blue || 0;
@@ -177,6 +178,10 @@ class ToioSim {
             this.cubeElement.style.borderTop = `4px solid ${color}`;
             this.cubeElement.style.boxShadow = `0 0 10px ${color}`;
         }
+        // repetitions=0 は無限ループ: 点灯しっぱなしで即 resolve
+        if (repetitions === 0) return Promise.resolve();
+        const singleDur = frames.reduce((sum, f) => sum + (f.duration_ms || 100), 0);
+        const totalDuration = singleDur * repetitions;
         return new Promise(resolve => {
             this._lightTimeoutId = setTimeout(() => {
                 if (this.cubeElement) {

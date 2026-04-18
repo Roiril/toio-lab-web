@@ -111,7 +111,7 @@ class ToolExecutor {
 
                     case "set_light_pattern": {
                         if (this.toio.setLightPattern) {
-                            await this._retryOnce(() => this.toio.setLightPattern(args.frames, args.repetitions || 1), "set_light_pattern");
+                            await this._retryOnce(() => this.toio.setLightPattern(args.frames, args.repetitions ?? 1), "set_light_pattern");
                             resultData = { status: "success", desc: `Played light pattern with ${args.frames.length} frames (${args.repetitions} reps)` };
                         } else {
                             resultData = { status: "error", error: "set_light_pattern not supported by current interface" };
