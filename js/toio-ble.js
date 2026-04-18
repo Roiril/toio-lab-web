@@ -409,7 +409,7 @@ class ToioBLE {
      */
     async setLight(r, g, b, durationMs = 0) {
         if (!this.isConnected) return;
-        let dur = durationMs > 0 ? Math.floor(durationMs / 10) : 0;
+        let dur = durationMs > 0 ? Math.max(1, Math.floor(durationMs / 10)) : 0;
         if (dur > 255) dur = 255;
         const buf = new Uint8Array([0x03, dur, 0x01, 0x01, r, g, b]);
         await this._enqueueWrite(() => this.characteristics.light.writeValueWithoutResponse(buf));
@@ -433,7 +433,7 @@ class ToioBLE {
         for (let i = 0; i < numFrames; i++) {
             const f = frames[i];
             let durMs = f.duration_ms || 100;
-            let dur10ms = Math.min(255, Math.floor(durMs / 10));
+            let dur10ms = Math.max(1, Math.min(255, Math.floor(durMs / 10)));
             totalDurationMs += durMs;
             
             let offset = 3 + i * 6;

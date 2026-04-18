@@ -24,6 +24,7 @@ class ToioSim {
         this._boundUpdate = this._update.bind(this);
         requestAnimationFrame(this._boundUpdate);
         
+        this._lightTimeoutId = null;
         this._render();
     }
 
@@ -107,10 +108,28 @@ class ToioSim {
 
 
     async setLight(r, g, b, durationMs = 0) {
+        if (this._lightTimeoutId) {
+            clearTimeout(this._lightTimeoutId);
+            this._lightTimeoutId = null;
+        }
+
         if (this.cubeElement) {
             const color = `rgb(${r}, ${g}, ${b})`;
             this.cubeElement.style.borderTop = `4px solid ${color}`;
             this.cubeElement.style.boxShadow = `0 0 10px ${color}`;
+        }
+
+        if (durationMs > 0) {
+            return new Promise(resolve => {
+                this._lightTimeoutId = setTimeout(() => {
+                    if (this.cubeElement) {
+                        this.cubeElement.style.borderTop = "none";
+                        this.cubeElement.style.boxShadow = "none";
+                    }
+                    this._lightTimeoutId = null;
+                    resolve();
+                }, durationMs);
+            });
         }
         return Promise.resolve();
     }
@@ -146,7 +165,16 @@ class ToioSim {
             this.cubeElement.style.borderTop = `4px solid ${color}`;
             this.cubeElement.style.boxShadow = `0 0 10px ${color}`;
         }
-        return new Promise(resolve => setTimeout(resolve, totalDuration));
+        return new Promise(resolve => {
+            this._lightTimeoutId = setTimeout(() => {
+                if (this.cubeElement) {
+                    this.cubeElement.style.borderTop = "none";
+                    this.cubeElement.style.boxShadow = "none";
+                }
+                this._lightTimeoutId = null;
+                resolve();
+            }, totalDuration);
+        });
     }
 
     async getBattery() {

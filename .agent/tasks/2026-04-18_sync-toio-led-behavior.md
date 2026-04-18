@@ -1,0 +1,5 @@
+- [x] `js/toio-sim.js` に `setLight` の消灯タイマーを実装
+- [x] `js/toio-sim.js` の `setLightPattern` 終了時に消灯する処理を追加
+- [x] `js/toio-ble.js` の `setLight` 時間計算を堅牢に修正（Math.max(1, ...))
+- [x] `js/toio-ble.js` の `setLightPattern` 時間計算を堅牢に修正
+- [x] シミュレーターでの動作確認
