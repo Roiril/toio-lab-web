@@ -46,11 +46,10 @@ window.APP_CONFIG = {
     if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
         Write-Host "`n[エラー] npx コマンドが見つかりません。Node.jsがインストールされているか確認してください。" -ForegroundColor Red
     } else {
-        Write-Host "`n===============================================" -ForegroundColor Green
-        Write-Host "  起動完了！ブラウザで以下にアクセスしてください:" -ForegroundColor Green
-        Write-Host "  http://localhost:3000" -ForegroundColor White -BackgroundColor DarkCyan
-        Write-Host "===============================================" -ForegroundColor Green
+        Write-Host "`nローカルサーバーを起動しています..." -ForegroundColor Cyan
+        Write-Host "起動完了後、画面に表示される URL (Local: http://localhost:...) へブラウザでアクセスしてください。" -ForegroundColor Green
         Write-Host "`nサーバーを停止するにはこのウィンドウを閉じるか Ctrl+C を押してください。" -ForegroundColor Gray
+        Write-Host "--------------------------------------------------------" -ForegroundColor Gray
 
         npx -y serve@latest . -l 3000
     }

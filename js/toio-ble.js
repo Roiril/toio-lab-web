@@ -71,6 +71,9 @@ class ToioBLE {
 
     async connect() {
         try {
+            if (!navigator.bluetooth) {
+                throw new Error("この環境ではWeb Bluetoothがサポートされていません。\n(Chrome/Edgeを使用し、URLが localhost または HTTPS であるか確認してください)");
+            }
             console.log("Requesting toio Bluetooth Device...");
             this.device = await navigator.bluetooth.requestDevice({
                 filters: [{ services: [TOIO_SERVICE_UUID] }]
