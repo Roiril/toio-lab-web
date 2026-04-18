@@ -122,13 +122,27 @@ class AgentLoop {
                 this.onStep({
                     type: 'thinking',
                     iteration,
-    
+
                     message: evaluation.success
                         ? `完了: ${evaluation.reasoning}`
-                        : `継続中: ${evaluation.reasoning}`
+                        : `未到達: ${evaluation.reasoning}`
                 });
 
-                currentResponse = await this.ollama.continueWithToolResults(toolCalls, results, tools);
+                // 未到達の場合、LLM に渡す結果に警告を注入してリトライを促す
+                let resultsForLLM = results;
+                if (!evaluation.success) {
+                    const moveCallIdx = toolCalls.findIndex(c => c.function.name === 'move_to');
+                    if (moveCallIdx !== -1) {
+                        resultsForLLM = [...results];
+                        try {
+                            const r = JSON.parse(resultsForLLM[moveCallIdx]);
+                            r.warning = `目標地点に未到達 (${evaluation.reasoning})。move_to を再度呼び出して正確な位置へ移動してください。`;
+                            resultsForLLM[moveCallIdx] = JSON.stringify(r);
+                        } catch { /* パース失敗時はそのまま */ }
+                    }
+                }
+
+                currentResponse = await this.ollama.continueWithToolResults(toolCalls, resultsForLLM, tools);
                 steps.push(currentResponse);
             }
 
