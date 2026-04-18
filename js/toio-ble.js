@@ -458,7 +458,7 @@ class ToioBLE {
         if (!this.isConnected) return;
         let dur = durationMs > 0 ? Math.floor(durationMs / 10) : 0;
         if (dur > 255) dur = 255;
-        const buf = new Uint8Array([0x03, 0x01, dur, noteId, 0xff]);
+        const buf = new Uint8Array([0x03, 0x01, 0x01, dur, noteId, 0xff]);
         await this._enqueueWrite(() => this.characteristics.sound.writeValueWithoutResponse(buf));
         return new Promise(resolve => setTimeout(resolve, durationMs));
     }
