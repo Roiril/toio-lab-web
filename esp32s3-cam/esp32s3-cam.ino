@@ -159,10 +159,11 @@ void setup() {
     Serial.println("Camera OK");
 
     // WiFi接続
+    WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
     Serial.print("WiFi接続中");
     int tries = 0;
-    while (WiFi.status() != WL_CONNECTED && tries < 30) {
+    while (WiFi.status() != WL_CONNECTED && tries < 60) {
         delay(500);
         Serial.print(".");
         tries++;
