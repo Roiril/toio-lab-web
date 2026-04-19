@@ -122,7 +122,15 @@ class OllamaClient {
     }
 
     async chat(userText, tools, options = {}) {
-        this.chatHistory.push({ role: "user", content: userText });
+        // pendingImage はカメラキャプチャ後に app.js からセットされる
+        // Ollamaのvision形式: images配列にbase64文字列 (data:...プレフィックスなし)
+        const imageBase64 = this.pendingImage || options.imageBase64;
+        this.pendingImage = null;
+        const msg = { role: "user", content: userText };
+        if (imageBase64) {
+            msg.images = [imageBase64.replace(/^data:image\/\w+;base64,/, '')];
+        }
+        this.chatHistory.push(msg);
         return this.sendMessages(tools, options);
     }
 

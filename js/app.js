@@ -34,6 +34,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const saveSettingsBtn = document.getElementById("save-settings-btn");
     const clearMemoryBtn = document.getElementById("clear-memory-btn");
 
+    // Camera UI elements
+    const cameraStatusDot = document.getElementById("camera-status-dot");
+    const cameraStatusText = document.getElementById("camera-status-text");
+    const cameraPreviewImg = document.getElementById("camera-preview-img");
+    const cameraPlaceholder = document.getElementById("camera-placeholder");
+    const cameraConnectBtn = document.getElementById("camera-connect-btn");
+    const cameraPreviewBtn = document.getElementById("camera-preview-btn");
+    const cameraCaptureBtn = document.getElementById("camera-capture-btn");
+    const cameraAttachPreview = document.getElementById("camera-attach-preview");
+    const cameraAttachImg = document.getElementById("camera-attach-img");
+    const cameraAttachClear = document.getElementById("camera-attach-clear");
+    const cameraUrlInput = document.getElementById("camera-url-input");
+
     // --- State & Instances ---
     const spatialAwareness = new SpatialAwareness();
     const toioBle = new ToioBLE();
@@ -47,12 +60,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const savedGeminiModel = localStorage.getItem('gemini_model') || window.APP_CONFIG?.GEMINI_MODEL || 'gemini-2.5-flash';
     const savedOllamaBaseUrl = localStorage.getItem('ollama_base_url') || window.APP_CONFIG?.OLLAMA_URL || 'http://localhost:11434';
     const savedOllamaModel = localStorage.getItem('ollama_model') || window.APP_CONFIG?.OLLAMA_MODEL || 'gemma4:e4b';
+    const savedCameraUrl = localStorage.getItem('camera_url') || '';
 
     if (llmProviderSelect) llmProviderSelect.value = savedProvider;
     if (geminiApiKeyInput) geminiApiKeyInput.value = savedApiKey;
     if (geminiModelInput) geminiModelInput.value = savedGeminiModel;
     if (ollamaBaseUrlInput) ollamaBaseUrlInput.value = savedOllamaBaseUrl;
     if (ollamaModelInput) ollamaModelInput.value = savedOllamaModel;
+    if (cameraUrlInput) cameraUrlInput.value = savedCameraUrl;
 
     // プロバイダー変更時に設定の表示を切り替える
     const updateSettingsVisibility = () => {
@@ -78,10 +93,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const sessionMemory = new SessionMemory();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
     const executor = new ToolExecutor(combinedToio, environment);
+    const cameraClient = new CameraClient(savedCameraUrl);
 
     // UI state
     let isAgentRunning = false;
     let isProcessingChat = false;
+    let pendingCameraCapture = null; // base64 string to attach to next LLM message
     let currentThinkingNode = null;
     let hasSyncedInitialPosition = false;
 
@@ -198,6 +215,10 @@ document.addEventListener("DOMContentLoaded", () => {
             onStep: handleAgentStep
         });
 
+        const newCameraUrl = cameraUrlInput.value.trim();
+        localStorage.setItem('camera_url', newCameraUrl);
+        cameraClient.setUrl(newCameraUrl);
+
         settingsModal.classList.remove('active');
         checkLlmConnection();
 
@@ -209,6 +230,52 @@ document.addEventListener("DOMContentLoaded", () => {
             saveSettingsBtn.disabled = false;
         }, 1500);
     });
+
+    // Camera event listeners
+    let isPreviewing = false;
+
+    cameraConnectBtn.addEventListener('click', async () => {
+        cameraConnectBtn.disabled = true;
+        cameraConnectBtn.textContent = '確認中...';
+        const ok = await cameraClient.checkConnection();
+        updateCameraStatus(ok);
+        cameraConnectBtn.disabled = false;
+        cameraConnectBtn.textContent = ok ? 'Reconnect' : 'Connect';
+        if (!ok) addMessage("system", "カメラに接続できませんでした。設定でURLを確認してください。");
+    });
+
+    cameraPreviewBtn.addEventListener('click', () => {
+        if (isPreviewing) {
+            cameraClient.stopPreview();
+            isPreviewing = false;
+            cameraPreviewBtn.textContent = 'Preview';
+            cameraPreviewImg.style.display = 'none';
+            cameraPlaceholder.style.display = 'flex';
+        } else {
+            cameraPreviewImg.style.display = 'block';
+            cameraPlaceholder.style.display = 'none';
+            cameraClient.startPreview(cameraPreviewImg, 5);
+            isPreviewing = true;
+            cameraPreviewBtn.textContent = 'Stop';
+        }
+    });
+
+    cameraCaptureBtn.addEventListener('click', async () => {
+        cameraCaptureBtn.disabled = true;
+        try {
+            const base64 = await cameraClient.captureBase64();
+            pendingCameraCapture = base64;
+            cameraAttachImg.src = base64;
+            cameraAttachPreview.style.display = 'flex';
+            cameraCaptureBtn.classList.add('has-capture');
+        } catch (e) {
+            addMessage("system", "カメラキャプチャ失敗: " + e.message);
+        } finally {
+            cameraCaptureBtn.disabled = false;
+        }
+    });
+
+    cameraAttachClear.addEventListener('click', clearCameraAttach);
 
     // Quick Actions were removed from UI
 
@@ -270,7 +337,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const text = chatInput.value.trim();
         chatInput.value = "";
-        
+
+        // カメラ添付画像があればLLMクライアントにセット
+        if (pendingCameraCapture) {
+            llmClient.pendingImage = pendingCameraCapture;
+            pendingCameraCapture = null;
+            clearCameraAttach();
+        }
+
         setChatProcessingState(true);
         isAgentRunning = true;
         addMessage("user", text);
@@ -287,6 +361,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 currentThinkingNode = null;
             }
         }
+    }
+
+    function clearCameraAttach() {
+        pendingCameraCapture = null;
+        cameraAttachPreview.style.display = 'none';
+        cameraAttachImg.src = '';
+        cameraCaptureBtn.classList.remove('has-capture');
+    }
+
+    function updateCameraStatus(connected) {
+        cameraStatusDot.className = connected ? 'dot connected' : 'dot disconnected';
+        cameraStatusText.innerText = connected ? 'Connected' : 'Disconnected';
+        cameraPreviewBtn.disabled = !connected;
+        cameraCaptureBtn.disabled = !connected;
     }
 
     function setChatProcessingState(isProcessing) {

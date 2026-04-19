@@ -160,7 +160,16 @@ class GeminiClient {
     }
 
     async chat(userText, tools, options = {}) {
-        this.chatHistory.push({ role: "user", content: userText });
+        // pendingImage はカメラキャプチャ後に app.js からセットされる
+        const imageBase64 = this.pendingImage || options.imageBase64;
+        this.pendingImage = null;
+        const content = imageBase64
+            ? [
+                { type: "text", text: userText },
+                { type: "image_url", image_url: { url: imageBase64 } }
+              ]
+            : userText;
+        this.chatHistory.push({ role: "user", content });
         return this.sendMessages(tools, options);
     }
 
