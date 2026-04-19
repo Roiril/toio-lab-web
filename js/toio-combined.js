@@ -19,55 +19,66 @@ class ToioCombined {
         ]);
     }
 
+    _bleSafe(promise, label) {
+        return promise.catch(e => console.warn(`[BLE] ${label} failed (non-fatal):`, e.message));
+    }
+
     async stop() {
         await Promise.all([
             this.sim.stop(),
-            this.ble.isConnected ? this.ble.stop() : Promise.resolve()
+            this.ble.isConnected ? this._bleSafe(this.ble.stop(), 'stop') : Promise.resolve()
         ]);
     }
 
     async spin(speed, durationMs, direction) {
         await Promise.all([
             this.sim.spin(speed, durationMs, direction),
-            this.ble.isConnected ? this.ble.spin(speed, durationMs, direction) : Promise.resolve()
+            this.ble.isConnected ? this._bleSafe(this.ble.spin(speed, durationMs, direction), 'spin') : Promise.resolve()
         ]);
     }
 
     async setLight(r, g, b, durationMs) {
         await Promise.all([
             this.sim.setLight(r, g, b, durationMs),
-            this.ble.isConnected ? this.ble.setLight(r, g, b, durationMs) : Promise.resolve()
+            this.ble.isConnected ? this._bleSafe(this.ble.setLight(r, g, b, durationMs), 'setLight') : Promise.resolve()
         ]);
     }
 
     async playSound(noteId, durationMs) {
         await Promise.all([
             this.sim.playSound(noteId, durationMs),
-            this.ble.isConnected ? this.ble.playSound(noteId, durationMs) : Promise.resolve()
+            this.ble.isConnected ? this._bleSafe(this.ble.playSound(noteId, durationMs), 'playSound') : Promise.resolve()
         ]);
     }
 
     async playMelody(notes) {
         await Promise.all([
             this.sim.playMelody(notes),
-            this.ble.isConnected && this.ble.playMelody ? this.ble.playMelody(notes) : Promise.resolve()
+            this.ble.isConnected && this.ble.playMelody
+                ? this._bleSafe(this.ble.playMelody(notes), 'playMelody')
+                : Promise.resolve()
         ]);
     }
 
     async setLightPattern(frames, repetitions) {
         await Promise.all([
             this.sim.setLightPattern(frames, repetitions),
-            this.ble.isConnected && this.ble.setLightPattern ? this.ble.setLightPattern(frames, repetitions) : Promise.resolve()
+            this.ble.isConnected && this.ble.setLightPattern
+                ? this._bleSafe(this.ble.setLightPattern(frames, repetitions), 'setLightPattern')
+                : Promise.resolve()
         ]);
     }
 
     async moveTo(x, y, angle) {
+        const blePromise = this.ble.isConnected
+            ? this._bleSafe(this.ble.moveTo(x, y, angle), 'moveTo')
+            : Promise.resolve(null);
         const [, bleResult] = await Promise.all([
             this.sim.moveTo(x, y, angle),
-            this.ble.isConnected ? this.ble.moveTo(x, y, angle) : Promise.resolve(null)
+            blePromise
         ]);
-        // Return BLE result when connected; otherwise synthesize a success result from sim
-        return this.ble.isConnected && bleResult !== null
+        // Return BLE result when connected and succeeded; otherwise synthesize from sim
+        return this.ble.isConnected && bleResult != null
             ? bleResult
             : { result: 0x00, resultStr: "Success" };
     }

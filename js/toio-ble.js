@@ -445,10 +445,13 @@ class ToioBLE {
 
     async setLightPattern(frames, repetitions = 1) {
         if (!this.isConnected || !frames || frames.length === 0) return;
-        
+
         let reps = Math.min(255, repetitions);
-        let numFrames = Math.min(29, frames.length); // Max 29 frames per characteristic size limit 
-        
+        // BLE ATT MTU default = 23 bytes → payload 20 bytes max.
+        // Header: 3 bytes, per frame: 6 bytes → max 2 frames (15 bytes) to stay under 20.
+        const BLE_MAX_FRAMES = 2;
+        let numFrames = Math.min(BLE_MAX_FRAMES, frames.length);
+
         let buf = new Uint8Array(3 + numFrames * 6);
         buf[0] = 0x04; // Continuous turn on
         buf[1] = reps;
@@ -490,8 +493,11 @@ class ToioBLE {
 
     async playMelody(notes) {
         if (!this.isConnected || !notes || notes.length === 0) return;
-        
-        let numNotes = Math.min(59, notes.length); // Max 59 operations per characteristic size limit 
+
+        // BLE ATT MTU default = 23 bytes → payload 20 bytes max.
+        // Header: 3 bytes, per note: 3 bytes → max 5 notes (15 bytes) to stay under 20.
+        const BLE_MAX_NOTES = 5;
+        let numNotes = Math.min(BLE_MAX_NOTES, notes.length);
         let buf = new Uint8Array(3 + numNotes * 3);
         
         buf[0] = 0x03; // MIDI Note sequence
