@@ -18,7 +18,7 @@
 #include <WebServer.h>
 
 // ===== WiFi設定 (ここを編集) =====
-const char* ssid     = "Pixel_7397";
+const char* ssid     = "Pixel_7_Pro";
 const char* password = "7g743d7dynake23";
 // ==================================
 
@@ -56,8 +56,12 @@ void handleCapture() {
         server.send(500, "text/plain", "Camera capture failed");
         return;
     }
+    // send_P はPROGMEM用。PSRAM上のフレームバッファは client.write で送る
     addCorsHeaders();
-    server.send_P(200, "image/jpeg", (const char*)fb->buf, fb->len);
+    server.setContentLength(fb->len);
+    server.send(200, "image/jpeg", "");
+    WiFiClient client = server.client();
+    client.write(fb->buf, fb->len);
     esp_camera_fb_return(fb);
 }
 
@@ -158,8 +162,11 @@ void setup() {
     }
     Serial.println("Camera OK");
 
-    // WiFi接続
+    // WiFi接続 (切断時の自動再接続も有効化)
     WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);
+    WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
     WiFi.begin(ssid, password);
     Serial.print("WiFi接続中");
     int tries = 0;
@@ -192,4 +199,12 @@ void setup() {
 
 void loop() {
     server.handleClient();
+
+    // 接続切れ時は5秒ごとに再接続を試みる
+    static unsigned long lastCheck = 0;
+    if (WiFi.status() != WL_CONNECTED && millis() - lastCheck > 5000) {
+        lastCheck = millis();
+        Serial.println("WiFi切断を検知。再接続試行...");
+        WiFi.reconnect();
+    }
 }

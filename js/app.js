@@ -110,6 +110,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- initialization ---
     checkLlmConnection();
     updateToioUIState();
+    if (savedCameraUrl) {
+        cameraClient.checkConnection().then(updateCameraStatus);
+    }
 
     // Sync loop removed: sim now mirrors BLE via onIdUpdateCallback.
 
@@ -218,6 +221,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const newCameraUrl = cameraUrlInput.value.trim();
         localStorage.setItem('camera_url', newCameraUrl);
         cameraClient.setUrl(newCameraUrl);
+        if (newCameraUrl) {
+            cameraClient.checkConnection().then(updateCameraStatus);
+        } else {
+            updateCameraStatus(false);
+        }
 
         settingsModal.classList.remove('active');
         checkLlmConnection();
