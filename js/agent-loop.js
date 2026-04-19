@@ -15,6 +15,16 @@ class AgentLoop {
         this.ollama.cancel();
     }
 
+    // Gemma系モデルのチャットテンプレートトークンを除去
+    _sanitizeContent(content) {
+        if (!content) return content;
+        return content
+            .replace(/<[a-zA-Z0-9_]+\|>/g, '')   // <channel|> など
+            .replace(/<\|[a-zA-Z0-9_]+\|>/g, '')  // <|...|> など
+            .replace(/<(start|end)_of_turn>/g, '') // <start_of_turn> など
+            .trim();
+    }
+
     // #1: LLM を使わずローカルで達成判定
     _localEvaluate(toolCalls, results) {
         const moveCallIdx = toolCalls.findIndex(c => c.function.name === 'move_to');
@@ -86,6 +96,7 @@ class AgentLoop {
                 `- 全ての操作が完了したら「〜しました！」とテキストで報告すること。`,
                 `- ツール失敗や未到達の場合は「〜がうまくいかなかったので、もう一度試みます」と説明してからリトライすること。`,
                 `- ❗ think() で立てた計画は必ず全ステップを最後まで実行すること。move_to が成功しても、光・音・回転など残りのステップがあれば続けて tool_calls を返すこと。途中で止まらない。`,
+                `- ❗❗ 絶対禁止: テキスト応答の中に move_to(...) や set_light_pattern(...) などのツール呼び出し構文を書いてはいけない。ツールはシステムの function calling 機構（tool_calls）だけで呼び出すこと。テキストに書いても実行されない。`,
                 ``,
                 `## move_to の挙動`,
                 `- move_to(x, y, angle) は内部で3ステップで動作する:`,
@@ -100,27 +111,27 @@ class AgentLoop {
                 `- repetitions=0 は無限ループ（別のライト命令が来るまで点灯し続ける）。`,
                 `- spin や move_to と同時に使いたい場合は、set_light_pattern を先に呼び出し、その後 spin/move_to を呼ぶ。`,
                 ``,
-                `## 応答例（この形式を参考にすること）`,
+                `## 応答の流れ（ツール名は参考。実際はfunction callingで呼ぶこと）`,
                 ``,
                 `例1: "右に動いて"`,
-                `→ think({thought: "現在位置を確認。右は+X方向なのでxを増やす。move_to(x=現在x+70, y=現在y, angle=0)を呼ぶ。"})`,
+                `→ [think を呼ぶ: 右は+X方向なのでxを増やす計画を立てる]`,
                 `→ テキスト: "右に移動します！"`,
-                `→ move_to(x=320, y=250, angle=0)`,
+                `→ [move_to を呼ぶ: x=現在x+70, y=現在y, angle=0]`,
                 `→ テキスト: "右に移動しました！"`,
                 ``,
                 `例2: "きらきら光りながらスピンして"`,
-                `→ think({thought: "光りながらスピンするには set_light_pattern を先に呼び、その後 spin を呼ぶ順序が正しい。repetitions=0で無限ループにしてスピン中も光り続けるようにする。"})`,
+                `→ [think を呼ぶ: set_light_patternを先に呼び、その後spinを呼ぶ計画]`,
                 `→ テキスト: "きらきら光りながらスピンします！"`,
-                `→ set_light_pattern(frames=[{duration_ms:150,red:255,green:200,blue:0},{duration_ms:150,red:0,green:180,blue:255}], repetitions=0)`,
-                `→ spin(direction="cw", duration_ms=2000)`,
+                `→ [set_light_pattern を呼ぶ: 2色フレーム, repetitions=0]`,
+                `→ [spin を呼ぶ: direction=cw, duration_ms=2000]`,
                 `→ テキスト: "きらきらスピンしました！"`,
                 ``,
                 `例3: "前に進んで" (向き不明の場合)`,
-                `→ think({thought: "現在のangleを確認し、その向きを「前」と解釈する。angle=0なら+X方向が前。"})`,
-                `→ get_position()`,
-                `→ think({thought: "現在angle=270（上向き）。前=上方向なのでyを減らす。move_to(x=現在x, y=現在y-70, angle=270)。"})`,
+                `→ [think を呼ぶ: get_positionで現在の向きを確認する計画]`,
+                `→ [get_position を呼ぶ]`,
+                `→ [think を呼ぶ: 結果を解釈し、前方向を決定]`,
                 `→ テキスト: "現在上向きなので、上方向に進みます！"`,
-                `→ move_to(x=250, y=180, angle=270)`,
+                `→ [move_to を呼ぶ: x=現在x, y=現在y-70, angle=270]`,
                 `→ テキスト: "前に進みました！"`,
                 ``,
                 `## フィジカル環境`,
@@ -155,7 +166,7 @@ class AgentLoop {
                     iteration,
     
                     toolCalls,
-                    content: currentResponse.content
+                    content: this._sanitizeContent(currentResponse.content)
                 });
 
                 const results = await this.executor.executeAll(toolCalls);
@@ -198,7 +209,7 @@ class AgentLoop {
 
             // LLM が最後にテキスト応答を返した場合はそれを表示
             const finalContent = (!currentResponse.tool_calls?.length && currentResponse.content)
-                ? currentResponse.content
+                ? this._sanitizeContent(currentResponse.content)
                 : finalMessage;
 
             this.onStep({
