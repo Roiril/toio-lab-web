@@ -18,8 +18,8 @@
 #include <WebServer.h>
 
 // ===== WiFi設定 (ここを編集) =====
-const char* ssid     = "kougaku-lab-G";
-const char* password = "GISEDGISED";
+const char* ssid     = "Pixel_7397";
+const char* password = "7g743d7dynake23";
 // ==================================
 
 // XIAO ESP32S3 Sense のカメラピン定義
