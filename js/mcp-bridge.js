@@ -18,6 +18,7 @@ class McpBridge {
         this.onStatus = onStatus || (() => {});
         this.isClosed = false;
         this.hasEverConnected = false;
+        this.pendingCalls = new Map(); // Track pending tool calls
     }
 
     connect() {
@@ -36,6 +37,32 @@ class McpBridge {
             this.ws = null;
         }
         this.onStatus({ state: "closed" });
+    }
+
+    isConnected() {
+        return this.ws && this.ws.readyState === WebSocket.OPEN;
+    }
+
+    async call(toolName, args) {
+        if (!this.isConnected()) {
+            throw new Error('MCP bridge not connected');
+        }
+        const msgId = `call-${Date.now()}-${Math.random()}`;
+        return new Promise((resolve, reject) => {
+            this.pendingCalls.set(msgId, { resolve, reject });
+            const payload = {
+                type: 'call',
+                id: msgId,
+                name: toolName,
+                arguments: args,
+            };
+            try {
+                this.ws.send(JSON.stringify(payload));
+            } catch (e) {
+                this.pendingCalls.delete(msgId);
+                reject(e);
+            }
+        });
     }
 
     _openSocket() {
@@ -63,6 +90,17 @@ class McpBridge {
 
             if (msg.type === "call" && msg.id && msg.name) {
                 await this._handleCall(msg);
+            } else if (msg.type === "result" && msg.id) {
+                // Handle response to our tool call
+                const pending = this.pendingCalls.get(msg.id);
+                if (pending) {
+                    this.pendingCalls.delete(msg.id);
+                    if (msg.error) {
+                        pending.reject(new Error(msg.error));
+                    } else {
+                        pending.resolve(msg.result);
+                    }
+                }
             }
         });
 

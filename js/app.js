@@ -108,9 +108,40 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentThinkingNode = null;
     let hasSyncedInitialPosition = false;
 
-    // Narration state (deduplication & character consistency)
-    let narrationHistory = [];
-    const MAX_HISTORY = 15;
+
+    // Track assistant response for reading
+    let lastAssistantText = '';
+    let lastNarrationPlan = null;
+
+    // Voice synthesis queue to prevent overlapping audio
+    let voiceSynthesisQueue = [];
+    let isProcessingVoice = false;
+
+    const enqueueVoiceSynthesis = async (textToSpeak) => {
+        voiceSynthesisQueue.push(textToSpeak);
+        processVoiceSynthesisQueue();
+    };
+
+    const processVoiceSynthesisQueue = async () => {
+        if (isProcessingVoice || voiceSynthesisQueue.length === 0) return;
+
+        isProcessingVoice = true;
+        const text = voiceSynthesisQueue.shift();
+
+        try {
+            await bridge.executor.toio.speakText(text, 'ja');
+        } catch (err) {
+            console.error('[speak_text] Failed:', err);
+        } finally {
+            isProcessingVoice = false;
+            if (voiceSynthesisQueue.length > 0) {
+                processVoiceSynthesisQueue();
+            }
+        }
+    };
+
+    // MCP Bridge instance (scoped for TTS access)
+    let bridge = null;
 
     // Agent Loop initialization (skipped when running as an MCP bridge)
     let agentLoop = llmClient
@@ -132,7 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (bridgeEnabled) {
         const mcpPort = Number(urlParams.get('mcpPort')) || savedMcpWsPort;
-        const bridge = new McpBridge(executor, {
+        bridge = new McpBridge(executor, {
             port: mcpPort,
             onStatus: ({ state, url }) => {
                 if (state === 'open') {
@@ -164,20 +195,37 @@ document.addEventListener("DOMContentLoaded", () => {
                         }
                         break;
                     case 'working':
-                        // Already showing "processing" from submitChat
+                        // Reset turn state at start
+                        lastAssistantText = '';
+                        lastNarrationPlan = null;
                         break;
                     case 'assistant': {
-                        const meta = [];
-                        if (msg.latency_ms) meta.push(`${Math.round(msg.latency_ms)}ms`);
-                        const suffix = meta.length ? `\n\n_(${meta.join(' · ')})_` : '';
-                        addMessage('ai', (msg.text || '(空のレスポンス)') + suffix);
+                        const displayText = msg.text || '(空のレスポンス)';
+                        addMessage('ai', displayText);
+                        // Track text for reading
+                        lastAssistantText = msg.text || '';
+                        lastNarrationPlan = msg.narrationPlan || null;
                         // Don't close state yet — wait for 'result'
                         break;
                     }
-                    case 'result':
-                        // Turn complete
+                    case 'result': {
+                        // Heuristic: skip narration for simple completion messages
+                        const isSingleLineCompletion = lastAssistantText.trim().split('\n').length === 1 &&
+                            /^(.*?(完了|終了|完了しました|してきました|到達しました).*)$/.test(lastAssistantText);
+
+                        if (lastNarrationPlan && lastNarrationPlan.should_narrate === false) {
+                            console.log('[ClaudeChat] Narration plan: skip');
+                        } else if (isSingleLineCompletion) {
+                            console.log('[ClaudeChat] Heuristic: skip simple completion');
+                        } else if (lastAssistantText.trim() && bridge && bridge.isConnected()) {
+                            console.log('[ClaudeChat] Speak response');
+                            const textToSpeak = lastNarrationPlan?.text || lastAssistantText;
+                            enqueueVoiceSynthesis(textToSpeak);
+                        }
                         setChatProcessingState(false);
+                        lastNarrationPlan = null;
                         break;
+                    }
                     case 'error':
                         addMessage('system', `エラー: ${msg.error}`);
                         setChatProcessingState(false);
@@ -192,11 +240,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         console.log('[ClaudeChat] claude process disconnected');
                         if (isProcessingChat) setChatProcessingState(false);
                         break;
-                    case 'narration_plan': {
-                        // Auto-execute narration plan from Claude
-                        executeNarrationPlan(msg.plan);
-                        break;
-                    }
                 }
             },
             onStatus: ({ state }) => {
@@ -619,56 +662,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function scrollChat() {
         chatHistory.scrollTop = chatHistory.scrollHeight;
-    }
-
-    async function executeNarrationPlan(plan) {
-        if (!plan || !plan.narrations || !Array.isArray(plan.narrations)) {
-            console.warn('[executeNarrationPlan] Invalid plan:', plan);
-            return;
-        }
-
-        for (const narration of plan.narrations) {
-            if (!narration.text || typeof narration.text !== 'string') {
-                console.warn('[executeNarrationPlan] Skipping narration with missing/invalid text:', narration);
-                continue;
-            }
-
-            // Skip if this exact narration was recently played (deduplication)
-            if (narrationHistory.includes(narration.text)) {
-                console.log('[executeNarrationPlan] skip (recent):', narration.text.slice(0, 50));
-                continue;
-            }
-
-            // Apply delay if specified
-            const delayMs = narration.delay_ms || 0;
-            if (delayMs > 0) {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-            }
-
-            // Call speak_text via MCP bridge
-            try {
-                if (!bridge || !bridge.isConnected()) {
-                    console.warn('[executeNarrationPlan] MCP bridge not connected');
-                    continue;
-                }
-
-                const timing = narration.timing || 'default';
-                console.log(`[executeNarrationPlan] (${timing})`, narration.text.slice(0, 60));
-
-                const result = await bridge.call('speak_text', {
-                    text: narration.text,
-                    language: narration.language || 'ja'
-                });
-
-                // Track in history to avoid repetition
-                narrationHistory.push(narration.text);
-                if (narrationHistory.length > MAX_HISTORY) {
-                    narrationHistory.shift();
-                }
-            } catch (err) {
-                console.error('[executeNarrationPlan] Failed to execute narration:', err.message);
-            }
-        }
     }
 
     function escapeHTML(str) {

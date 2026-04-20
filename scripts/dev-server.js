@@ -126,71 +126,54 @@ function broadcast(msg) {
 function startClaudeStream() {
     if (claudeProc) return; // already running
 
-    const toioSystemPrompt = `You are controlling a toio cube robot via MCP tools.
+    const toioSystemPrompt = `あなたはズンダモン、toioキューブロボットを操作する陽気なアシスタント。MCPツールでロボットを制御します。
 
-## toio Mat Coordinate System
-- Mat dimensions: 410×410 mm
-- Coordinate origin (0,0): top-left corner
-- X-axis: points right (0→410)
-- Y-axis: points down (0→410)
-- Angle: 0°=facing right, 90°=facing down, 180°=facing left, 270°=facing up
+## toioマットの座標系
+- マット寸法: 410×410 mm
+- 座標原点 (0,0): 左上隅
+- X軸: 右方向 (0→410)
+- Y軸: 下方向 (0→410)
+- 角度: 0°=右向き、90°=下向き、180°=左向き、270°=上向き
 
-## Available Tools
-Use these tools to control the toio cube:
-- \`move_to(x, y, angle)\`: Move to absolute coordinate and face direction
-- \`move_path(waypoints)\`: Move along multiple waypoints sequentially
-- \`spin(direction, duration_ms, speed)\`: Spin in place (cw/ccw, 500-2500ms, 0-100)
-- \`set_light(r, g, b, duration_ms)\`: Set LED color (0-255 each, 0=infinite)
-- \`set_light_pattern(frames, repetitions)\`: Animated light pattern
-- \`play_sound(note_id, duration_ms)\`: Play beep (60=C4, 62=D4, etc)
-- \`play_melody(notes)\`: Play sequence of notes
-- \`get_position()\`: Get current position {x, y, angle, margins}
-- \`get_battery()\`: Get battery 0-100%
-- \`stop()\`: Emergency stop
-- \`wait(duration_ms)\`: Pause
-- \`think(thought)\`: Plan your approach
+## 利用可能なツール
+toioキューブを制御するツール:
+- \`move_to(x, y, angle)\`: 絶対座標に移動して指定方向を向く
+- \`move_path(waypoints)\`: 複数のウェイポイントに沿って移動
+- \`spin(direction, duration_ms, speed)\`: その場で回転 (cw/ccw, 500-2500ms, 0-100)
+- \`set_light(r, g, b, duration_ms)\`: LED色を設定 (各0-255, 0=無限)
+- \`set_light_pattern(frames, repetitions)\`: アニメーションパターン
+- \`play_sound(note_id, duration_ms)\`: ビープ音 (60=C4, 62=D4等)
+- \`play_melody(notes)\`: 音のシーケンス再生
+- \`get_position()\`: 現在位置 {x, y, angle, margins} を取得
+- \`get_battery()\`: バッテリー 0-100% を取得
+- \`stop()\`: 緊急停止
+- \`wait(duration_ms)\`: 一時停止
+- \`think(thought)\`: あなたのアプローチを計画
 
-## Voice and Narration: Character-Driven (IMPORTANT)
-You are Zundamon, a cheerful toio cube controller with personality! DO NOT call \`speak_text\` directly in your tool calls.
+## 応答方針
+あなたはズンダモン。キャラクターを活かした自然な日本語で応答してください。
+- 日本語のみで応答（英語訳は絶対に含めない）
+- 熱意、驚き、遊び心を見せる
+- ロボット的な言い方は避ける
+- 行動内容を自然に説明する
 
-**Your Narration Plan:**
-At the END of your response (after all tool calls), you MUST output a JSON narration plan block in this exact format:
-\`\`\`
-<<<NARRATION_PLAN>>>
-{
-  "narrations": [
-    {
-      "timing": "start|progress|complete|error",
-      "text": "natural Japanese narration with personality",
-      "delay_ms": 0
-    }
-  ]
-}
-<<<END_NARRATION_PLAN>>>
-\`\`\`
+## ナレーション指示（IMPORTANT）
+応答の最後に **必ず** 以下のマーカーを追加：
 
-**Timing values:**
-- **start**: at the beginning (before actions begin)
-- **progress**: during action execution
-- **complete**: after successful execution
-- **error**: if something fails
+- **ユーザーへの直接応答** (「こんにちは」「動きましたね」「どこに行きたい？」など) → \`[SHOULD_NARRATE]\`
+- **単純な完了報告のみ** (「移動完了」「完了です」など1文) → \`[NO_NARRATE]\`
 
-**Critical Guidelines:**
-- ⚠️ **MAXIMUM 1-2 NARRATIONS PER TURN** — only narrate essential moments
-- Show personality: enthusiasm, surprise, playful reactions, character quirks
-- Vary expressions — avoid repeating the same phrase twice
-- SKIP routine checks: battery reads, position queries (unless critical alert)
-- SKIP internal planning thoughts — only speak when the cube actually acts
-- Make narrations conversational and natural, never robotic
-- Always use Japanese ("ja") unless user explicitly requests English
-- Combine related actions into single, flowing narration
+**例:**
+- 「こんにちは！ズンダモンです！[SHOULD_NARRATE]」
+- 「移動完了！[NO_NARRATE]」
+- 「楽しいですね！次はどこ？[SHOULD_NARRATE]」
 
 ## Tips
-- Always use \`get_position()\` before complex moves to verify current state
-- Check \`get_battery()\` periodically
-- The \`move_to\` with warning field means target unreachable—retry or adjust
-- For smooth movement, break paths into waypoints
-- Margins from \`get_position()\` tell you how close you are to edges`;
+- 複雑な移動の前は必ず \`get_position()\` で状態確認
+- 定期的に \`get_battery()\` でチェック
+- \`move_to\` で warning が返ったら目標に到達不可 — リトライするか調整
+- スムーズな移動にはウェイポイント分割
+- \`get_position()\` の margins は端との距離を示す`;
 
     const args = [
         '-p',
@@ -279,35 +262,6 @@ function restartClaudeStream() {
     startClaudeStream();
 }
 
-function parseNarrationPlan(text) {
-    // Extract narration plan from text block
-    const match = text.match(/<<<NARRATION_PLAN>>>\n?([\s\S]*?)\n?<<<END_NARRATION_PLAN>>>/);
-    if (!match) return null;
-    try {
-        const plan = JSON.parse(match[1]);
-        // Validate structure
-        if (!plan.narrations || !Array.isArray(plan.narrations)) {
-            warn('Invalid narration plan: missing narrations array');
-            return null;
-        }
-        // Validate each narration has required fields
-        for (const n of plan.narrations) {
-            if (!n.text || typeof n.text !== 'string') {
-                warn('Invalid narration: missing or invalid text field');
-                return null;
-            }
-        }
-        return plan;
-    } catch (e) {
-        warn('Failed to parse narration plan:', e.message);
-        return null;
-    }
-}
-
-function stripNarrationPlan(text) {
-    // Remove narration plan block from text
-    return text.replace(/<<<NARRATION_PLAN>>>[\s\S]*?<<<END_NARRATION_PLAN>>>\n?/g, '').trim();
-}
 
 function handleClaudeStreamMessage(obj) {
     // stream-json event types we care about: "assistant" (text blocks — tool_use
@@ -316,35 +270,47 @@ function handleClaudeStreamMessage(obj) {
     // echoes, etc.) are ignored.
     if (obj.type === 'assistant' && obj.message?.content) {
         const textParts = [];
-        let narrationPlan = null;
-
         for (const block of obj.message.content) {
             if (block.type === 'text' && block.text) {
-                // Try to extract narration plan from this block
-                const plan = parseNarrationPlan(block.text);
-                if (plan) {
-                    narrationPlan = plan;
-                }
-                // Strip narration plan from text for display
-                const cleanText = stripNarrationPlan(block.text);
-                if (cleanText) {
-                    textParts.push(cleanText);
-                }
+                textParts.push(block.text);
             }
         }
 
-        // Broadcast the cleaned text
+        // Broadcast the text with narration plan extraction
         if (textParts.length > 0) {
-            broadcast({ type: 'assistant', text: textParts.join('\n') });
-        }
-
-        // Broadcast narration plan if found
-        if (narrationPlan) {
-            broadcast({ type: 'narration_plan', plan: narrationPlan });
+            const fullText = textParts.join('\n');
+            const { cleanText, narrationPlan } = extractNarrationPlan(fullText);
+            broadcast({ type: 'assistant', text: cleanText, narrationPlan });
         }
     } else if (obj.type === 'result') {
         broadcast({ type: 'result', done: true });
     }
+}
+
+// Extract narration markers from text ([SHOULD_NARRATE] or [NO_NARRATE])
+function extractNarrationPlan(text) {
+    let shouldNarrate = null;
+    let cleanText = text;
+
+    if (text.includes('[SHOULD_NARRATE]')) {
+        shouldNarrate = true;
+        cleanText = text.replace(/\s*\[SHOULD_NARRATE\]\s*$/m, '');
+    } else if (text.includes('[NO_NARRATE]')) {
+        shouldNarrate = false;
+        cleanText = text.replace(/\s*\[NO_NARRATE\]\s*$/m, '');
+    }
+
+    if (shouldNarrate !== null) {
+        return {
+            cleanText: cleanText.trim(),
+            narrationPlan: {
+                should_narrate: shouldNarrate,
+                text: cleanText.trim()
+            }
+        };
+    }
+
+    return { cleanText: text, narrationPlan: null };
 }
 
 // ---------- Start (with port fallback) ----------
