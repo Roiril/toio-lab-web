@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/gen-config.js && npx serve . -l 3000",
+    "dev": "node scripts/gen-config.js && node scripts/dev-server.js",
     "gen-config": "node scripts/gen-config.js"
   },
-  "devDependencies": {
-    "serve": "^14.0.0"
+  "dependencies": {
+    "ws": "^8.18.0"
   }
 }

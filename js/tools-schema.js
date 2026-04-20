@@ -267,6 +267,10 @@ const toioTools = [
  * Filtered tools for the Agent (Planner/Generator) to reduce complexity and speed up response.
  * We prioritize move_to for all movement tasks.
  */
-const agentTools = toioTools.filter(t => 
+const agentTools = toioTools.filter(t =>
     ["move_to", "get_position", "stop", "set_light", "play_sound", "wait", "get_battery", "spin", "think", "play_melody", "move_path", "set_light_pattern"].includes(t.function.name)
 );
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = { toioTools, agentTools };
+}
