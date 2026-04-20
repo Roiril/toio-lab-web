@@ -294,4 +294,9 @@ class ToioSim {
         // toio 0deg is Right, CSS rotate 0deg is Up. Add 90deg to align.
         this.cubeElement.style.transform = `translate(-50%, -50%) rotate(${this.angle + 90}deg)`;
     }
+
+    async speakText(text, language = 'ja') {
+        console.log(`[Simulator] Speaking text: "${text}" (${language})`);
+        return { status: "success", text_length: text.length, language: language };
+    }
 }

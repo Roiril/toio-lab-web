@@ -260,6 +260,30 @@ const toioTools = [
           "required": ["x", "y"]
         }
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "speak_text",
+        "description": "Convert text to speech and play through PC speakers using Web Speech API. Supports Japanese and English. Max 500 characters per call.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string",
+              "description": "Text to speak (max 500 characters)",
+              "maxLength": 500
+            },
+            "language": {
+              "type": "string",
+              "enum": ["ja", "en"],
+              "default": "ja",
+              "description": "Language code (ja=Japanese, en=English)"
+            }
+          },
+          "required": ["text"]
+        }
+      }
     }
 ];
 

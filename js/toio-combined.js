@@ -91,4 +91,22 @@ class ToioCombined {
         }
         return await this.sim.getBattery();
     }
+
+    async speakText(text, language = 'ja') {
+        return new Promise((resolve, reject) => {
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = language === 'ja' ? 'ja-JP' : 'en-US';
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+
+            utterance.onend = () => resolve({
+                status: "success",
+                text_length: text.length,
+                language: language
+            });
+            utterance.onerror = (e) => reject(new Error(`Speech synthesis error: ${e.error}`));
+
+            window.speechSynthesis.speak(utterance);
+        });
+    }
 }

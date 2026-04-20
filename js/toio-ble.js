@@ -706,4 +706,8 @@ class ToioBLE {
         if (this.onBatteryUpdateCallback) this.onBatteryUpdateCallback(battery);
         return battery;
     }
+
+    async speakText(_text, _language = 'ja') {
+        return { status: "error", error: "speakText not supported on toio BLE device" };
+    }
 }

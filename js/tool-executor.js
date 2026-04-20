@@ -176,6 +176,31 @@ class ToolExecutor {
                     break;
                 }
 
+                case "speak_text": {
+                    const text = args.text || "";
+                    const language = args.language || "ja";
+
+                    if (!text.trim()) {
+                        resultData = { status: "error", error: "Text cannot be empty" };
+                        break;
+                    }
+
+                    if (text.length > 500) {
+                        resultData = {
+                            status: "error",
+                            error: `Text too long (${text.length}/500 chars). Please split into shorter chunks.`
+                        };
+                        break;
+                    }
+
+                    try {
+                        resultData = await this.toio.speakText(text, language);
+                    } catch (error) {
+                        resultData = { status: "error", error: error.message };
+                    }
+                    break;
+                }
+
                 default:
                     resultData = { status: "error", error: `Unknown function ${funcName}` };
                     console.warn(resultData.error);
