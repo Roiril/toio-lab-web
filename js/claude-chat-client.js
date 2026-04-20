@@ -36,6 +36,7 @@ class ClaudeChatClient {
     }
 
     _openSocket() {
+        console.log('[ClaudeChat] Attempting connection to:', this.url);
         try {
             this.ws = new WebSocket(this.url);
         } catch (e) {
@@ -47,6 +48,7 @@ class ClaudeChatClient {
         this.onStatus({ state: 'connecting', url: this.url });
 
         this.ws.addEventListener('open', () => {
+            console.log('[ClaudeChat] WebSocket connected successfully');
             this.onStatus({ state: 'open' });
         });
 
@@ -68,14 +70,16 @@ class ClaudeChatClient {
             this.onMessage(msg);
         });
 
-        this.ws.addEventListener('close', () => {
+        this.ws.addEventListener('close', (event) => {
+            console.log('[ClaudeChat] WebSocket closed. Code:', event.code, 'Reason:', event.reason);
             this.ws = null;
             this.onStatus({ state: 'closed' });
             if (!this.isClosed) this._scheduleReconnect();
         });
 
         this.ws.addEventListener('error', (e) => {
-            console.warn('[ClaudeChat] socket error', e);
+            console.error('[ClaudeChat] socket error', e);
+            console.error('[ClaudeChat] readyState:', this.ws?.readyState, 'url:', this.url);
         });
     }
 

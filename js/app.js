@@ -102,6 +102,10 @@ document.addEventListener("DOMContentLoaded", () => {
             },
             onStatus: (status) => {
                 console.log('[Claude Code] Status:', status.state);
+                // Update connection status when ClaudeChatClient status changes
+                if (status.state === 'open') {
+                    checkLlmConnection();
+                }
             }
         });
         window.claudeClient.connect();
@@ -385,14 +389,14 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!llmClient) {
             // Claude Code mode
             providerName = "Claude Code";
-            llmStatusText.innerText = `${providerName}: Checking...`;
+            llmStatusText.innerText = `${providerName}: Connecting...`;
             const isReady = window.claudeClient && window.claudeClient.isReady();
             if (isReady) {
                 ok = true;
                 reason = "Ready";
             } else {
                 ok = false;
-                reason = "Waiting for dev-server connection";
+                reason = "dev-server に接続中... ブラウザコンソールを確認してください";
             }
         } else {
             // Ollama or Gemini mode

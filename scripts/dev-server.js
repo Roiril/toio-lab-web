@@ -78,9 +78,11 @@ function createServers() {
 
     httpServer.on('upgrade', (req, socket, head) => {
         const { pathname } = new URL(req.url, 'http://localhost');
+        log(`WS upgrade request: ${pathname} from ${req.socket.remoteAddress}`);
         if (pathname === '/claude') {
             wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
         } else {
+            log(`WS upgrade rejected (wrong path): ${pathname}`);
             socket.destroy();
         }
     });
