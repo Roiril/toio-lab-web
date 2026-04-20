@@ -70,6 +70,13 @@ class ToolExecutor {
                     await this._retryOnce(() => this.toio.stop(), "stop");
                     const afterSnap = this.env ? this.env.getSnapshot() : {};
                     resultData = { status: "success", desc: "Stopped all movement", after_state: afterSnap.cube };
+
+                    // Auto voice feedback for stop
+                    try {
+                        await this.toio.speakText("停止しました", "ja");
+                    } catch (err) {
+                        console.warn("[ToolExecutor] Failed to speak stop feedback:", err.message);
+                    }
                     break;
                 }
 
@@ -78,18 +85,50 @@ class ToolExecutor {
                     await this._retryOnce(() => this.toio.spin(spd, args.duration_ms, args.direction || "cw"), "spin");
                     const afterSnap = this.env ? this.env.getSnapshot() : {};
                     resultData = { status: "success", desc: `Spun ${args.direction || "cw"} for ${args.duration_ms}ms`, after_state: afterSnap.cube };
+
+                    // Auto voice feedback for spin completion
+                    try {
+                        const direction = args.direction === "ccw" ? "左回転" : "右回転";
+                        await this.toio.speakText(`${direction}完了しました`, "ja");
+                    } catch (err) {
+                        console.warn("[ToolExecutor] Failed to speak spin completion:", err.message);
+                    }
                     break;
                 }
 
                 case "set_light": {
                     await this._retryOnce(() => this.toio.setLight(args.red, args.green, args.blue, args.duration_ms || 0), "set_light");
                     resultData = { status: "success", color: `rgb(${args.red},${args.green},${args.blue})` };
+
+                    // Auto voice feedback for light color change
+                    try {
+                        const r = args.red || 0, g = args.green || 0, b = args.blue || 0;
+                        let colorName = "色";
+                        if (r > 200 && g < 100 && b < 100) colorName = "赤色";
+                        else if (r < 100 && g > 200 && b < 100) colorName = "緑色";
+                        else if (r < 100 && g < 100 && b > 200) colorName = "青色";
+                        else if (r > 200 && g > 200 && b < 100) colorName = "黄色";
+                        else if (r > 200 && g > 100 && b > 100) colorName = "ピンク色";
+                        else if (r < 50 && g < 50 && b < 50) colorName = "消灯";
+                        else if (r > 200 && g > 200 && b > 200) colorName = "白色";
+
+                        await this.toio.speakText(`${colorName}に設定完了しました`, "ja");
+                    } catch (err) {
+                        console.warn("[ToolExecutor] Failed to speak light completion:", err.message);
+                    }
                     break;
                 }
 
                 case "play_sound": {
                     await this._retryOnce(() => this.toio.playSound(args.note_id || 60, args.duration_ms), "play_sound");
                     resultData = { status: "success", played_note: args.note_id || 60 };
+
+                    // Auto voice feedback for sound playback completion
+                    try {
+                        await this.toio.speakText("音の再生完了しました", "ja");
+                    } catch (err) {
+                        console.warn("[ToolExecutor] Failed to speak sound completion:", err.message);
+                    }
                     break;
                 }
 
@@ -99,6 +138,13 @@ class ToolExecutor {
                         console.log(`[ToolExecutor] play_melody: ${args.notes?.length || 0} notes, total duration ${totalDuration}ms`);
                         await this._retryOnce(() => this.toio.playMelody(args.notes), "play_melody");
                         resultData = { status: "success", desc: `Played melody with ${args.notes.length} notes (${totalDuration}ms total)` };
+
+                        // Auto voice feedback for melody playback completion
+                        try {
+                            await this.toio.speakText("メロディの再生完了しました", "ja");
+                        } catch (err) {
+                            console.warn("[ToolExecutor] Failed to speak melody completion:", err.message);
+                        }
                     } else {
                         resultData = { status: "error", error: "play_melody not supported by current interface" };
                     }
@@ -109,6 +155,13 @@ class ToolExecutor {
                     if (this.toio.setLightPattern) {
                         await this._retryOnce(() => this.toio.setLightPattern(args.frames, args.repetitions ?? 1), "set_light_pattern");
                         resultData = { status: "success", desc: `Played light pattern with ${args.frames.length} frames (${args.repetitions} reps)` };
+
+                        // Auto voice feedback for light pattern completion
+                        try {
+                            await this.toio.speakText("ライトパターンの再生完了しました", "ja");
+                        } catch (err) {
+                            console.warn("[ToolExecutor] Failed to speak light pattern completion:", err.message);
+                        }
                     } else {
                         resultData = { status: "error", error: "set_light_pattern not supported by current interface" };
                     }
@@ -150,6 +203,15 @@ class ToolExecutor {
                         clamped: isClamped,
                         after_state: arrivedAt
                     };
+
+                    // Auto voice feedback for movement completion
+                    if (moveRes && (moveRes.result === 0x00 || moveRes.result === 0)) {
+                        try {
+                            await this.toio.speakText("移動完了しました", "ja");
+                        } catch (err) {
+                            console.warn("[ToolExecutor] Failed to speak movement completion:", err.message);
+                        }
+                    }
                     break;
                 }
 
@@ -159,12 +221,23 @@ class ToolExecutor {
                         break;
                     }
                     let lastRes = null;
+                    let completedWaypoints = 0;
                     for (let i = 0; i < args.waypoints.length; i++) {
                         const wp = args.waypoints[i];
                         const safePos = this.env.spatial.clampToSafeRange(wp.x, wp.y);
                         lastRes = await this._retryOnce(() => this.toio.moveTo(safePos.x, safePos.y, wp.angle || 0), `move_path step ${i}`);
                         if (lastRes && lastRes.result !== 0x00 && lastRes.result !== 0) {
                             break;
+                        }
+                        completedWaypoints++;
+
+                        // Auto voice feedback for each waypoint arrival (except the last one)
+                        if (i < args.waypoints.length - 1) {
+                            try {
+                                await this.toio.speakText(`ポイント${i + 1}に到着しました`, "ja");
+                            } catch (err) {
+                                console.warn("[ToolExecutor] Failed to speak waypoint arrival:", err.message);
+                            }
                         }
                     }
                     const afterSnap = this.env.getSnapshot();
@@ -173,6 +246,15 @@ class ToolExecutor {
                         desc: `Executed move_path with ${args.waypoints.length} waypoints. Last result: ${lastRes?.resultStr || "OK"}`,
                         after_state: afterSnap.cube
                     };
+
+                    // Auto voice feedback for move_path completion
+                    if (completedWaypoints === args.waypoints.length) {
+                        try {
+                            await this.toio.speakText("すべてのウェイポイントに到達しました", "ja");
+                        } catch (err) {
+                            console.warn("[ToolExecutor] Failed to speak final waypoint completion:", err.message);
+                        }
+                    }
                     break;
                 }
 
