@@ -103,6 +103,12 @@ class ClaudeChatClient {
         this.ws.send(JSON.stringify({ type: 'reset' }));
         return true;
     }
+
+    stop() {
+        if (!this.isReady()) return false;
+        this.ws.send(JSON.stringify({ type: 'stop' }));
+        return true;
+    }
 }
 
 window.ClaudeChatClient = ClaudeChatClient;

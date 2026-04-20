@@ -8,6 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const chatInput = document.getElementById("chat-input");
     const sendBtn = document.getElementById("send-btn");
     const cancelBtn = document.getElementById("cancel-btn");
+    const emergencyStopBtn = document.getElementById("emergency-stop-btn");
     
     const llmStatusDot = document.getElementById("llm-status-dot");
     const llmStatusText = document.getElementById("llm-status-text");
@@ -78,6 +79,8 @@ document.addEventListener("DOMContentLoaded", () => {
             geminiSettingsGroup.style.display = 'block';
             ollamaSettingsGroup.style.display = 'none';
         }
+        // Update emergency stop button visibility
+        emergencyStopBtn.style.display = llmProviderSelect.value === 'claude-code' ? 'block' : 'none';
     };
     if (llmProviderSelect) {
         llmProviderSelect.addEventListener('change', updateSettingsVisibility);
@@ -87,6 +90,19 @@ document.addEventListener("DOMContentLoaded", () => {
     let llmClient;
     if (savedProvider === 'ollama') {
         llmClient = new OllamaClient(savedOllamaBaseUrl, savedOllamaModel);
+    } else if (savedProvider === 'claude-code') {
+        // Claude Code mode: initialize ClaudeChatClient for dev-server communication
+        window.claudeClient = new ClaudeChatClient({
+            onMessage: (msg) => {
+                // Messages will be handled by the chat UI integration
+                console.log('[Claude Code] Message:', msg.type);
+            },
+            onStatus: (status) => {
+                console.log('[Claude Code] Status:', status.state);
+            }
+        });
+        window.claudeClient.connect();
+        llmClient = null; // Claude Code doesn't use traditional LLM client
     } else {
         llmClient = new GeminiClient(savedApiKey, savedGeminiModel);
     }
@@ -199,6 +215,16 @@ document.addEventListener("DOMContentLoaded", () => {
         if (agentLoop) {
             agentLoop.cancel();
             cancelBtn.disabled = true;
+        }
+    });
+
+    emergencyStopBtn.addEventListener('click', () => {
+        if (confirm('Claude Code プロセスを強制停止しますか？')) {
+            if (window.claudeClient && window.claudeClient.stop()) {
+                addMessage("system", "🛑 Claude Code に停止要求を送信しました");
+            } else {
+                addMessage("system", "⚠️ Claude Code への接続がありません");
+            }
         }
     });
 

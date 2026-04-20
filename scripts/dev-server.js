@@ -103,6 +103,9 @@ function createServers() {
             } else if (msg.type === 'reset') {
                 restartClaudeStream();
                 broadcast({ type: 'reset-ack' });
+            } else if (msg.type === 'stop') {
+                stopClaudeStream();
+                broadcast({ type: 'stop-ack' });
             }
         });
 
@@ -269,6 +272,22 @@ function restartClaudeStream() {
     }
     claudeStdoutBuf = '';
     startClaudeStream();
+}
+
+function stopClaudeStream() {
+    log('emergency stop: killing claude process');
+    if (claudeProc) {
+        if (!claudeProc.killed) {
+            claudeProc.kill('SIGTERM');
+            setTimeout(() => {
+                if (claudeProc && !claudeProc.killed) {
+                    claudeProc.kill('SIGKILL');
+                }
+            }, 1000);
+        }
+        claudeProc = null;
+    }
+    claudeStdoutBuf = '';
 }
 
 
