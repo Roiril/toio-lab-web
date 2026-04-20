@@ -501,11 +501,24 @@ document.addEventListener("DOMContentLoaded", () => {
     function handleClaudeCodeMessage(msg) {
         console.log('[Claude Code] Received message type:', msg.type);
 
-        if (msg.type === 'working') {
+        if (msg.type === 'ready') {
+            // Initial ready message from dev-server
+            console.log('[Claude Code] dev-server ready, model:', msg.model);
+        } else if (msg.type === 'working') {
             setChatProcessingState(true);
         } else if (msg.type === 'assistant' && msg.text) {
             // Display assistant response
             addMessage("assistant", msg.text);
+
+            // Handle voice synthesis via narrationPlan
+            if (msg.narrationPlan) {
+                console.log('[Claude Code] narrationPlan:', msg.narrationPlan);
+                if (msg.narrationPlan.should_narrate === true) {
+                    // Speak the text
+                    enqueueVoiceSynthesis(msg.narrationPlan.text);
+                }
+                // If should_narrate === false, don't speak (e.g., simple completion message)
+            }
         } else if (msg.type === 'result') {
             // End of turn
             setChatProcessingState(false);
