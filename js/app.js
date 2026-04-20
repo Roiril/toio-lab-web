@@ -129,18 +129,25 @@ document.addEventListener("DOMContentLoaded", () => {
     let isProcessingVoice = false;
 
     const enqueueVoiceSynthesis = async (textToSpeak) => {
+        console.log('[Voice] Enqueueing text:', textToSpeak);
+        console.log('[Voice] Queue length before:', voiceSynthesisQueue.length);
         voiceSynthesisQueue.push(textToSpeak);
+        console.log('[Voice] Queue length after:', voiceSynthesisQueue.length);
         processVoiceSynthesisQueue();
     };
 
     const processVoiceSynthesisQueue = async () => {
+        console.log('[Voice] Processing queue - isProcessing:', isProcessingVoice, 'queueLength:', voiceSynthesisQueue.length);
         if (isProcessingVoice || voiceSynthesisQueue.length === 0) return;
 
         isProcessingVoice = true;
         const text = voiceSynthesisQueue.shift();
+        console.log('[Voice] Speaking text:', text);
 
         try {
+            console.log('[Voice] Calling speakText with language: ja');
             await window.combinedToio.speakText(text, 'ja');
+            console.log('[Voice] speakText completed successfully');
         } catch (err) {
             console.error('[speak_text] Failed:', err);
         } finally {
@@ -505,6 +512,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function handleClaudeCodeMessage(msg) {
         console.log('[Claude Code] Received message type:', msg.type);
+        console.log('[Claude Code] Full message:', msg);
 
         if (msg.type === 'ready') {
             // Initial ready message from dev-server
@@ -517,14 +525,21 @@ document.addEventListener("DOMContentLoaded", () => {
             addMessage("assistant", displayText);
 
             // Handle voice synthesis via narrationPlan
+            console.log('[Claude Code] Checking narrationPlan:', msg.narrationPlan);
             if (msg.narrationPlan) {
-                console.log('[Claude Code] narrationPlan:', msg.narrationPlan);
+                console.log('[Claude Code] narrationPlan found:', msg.narrationPlan);
                 if (msg.narrationPlan.should_narrate === true) {
                     // Strip English translations from narration text too
                     const textToSpeak = stripEnglishTranslation(msg.narrationPlan.text);
+                    console.log('[Claude Code] Enqueuing voice synthesis for:', textToSpeak);
                     enqueueVoiceSynthesis(textToSpeak);
+                } else {
+                    console.log('[Claude Code] Narration disabled (should_narrate=false)');
                 }
-                // If should_narrate === false, don't speak (e.g., simple completion message)
+            } else {
+                // Fallback: if narrationPlan is not provided, speak the message text
+                console.log('[Claude Code] No narrationPlan in message - using fallback (speak message text)');
+                enqueueVoiceSynthesis(displayText);
             }
         } else if (msg.type === 'result') {
             // End of turn
