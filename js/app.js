@@ -498,6 +498,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
+    function stripEnglishTranslation(text) {
+        // Remove English translations in parentheses at the end: " (English text)"
+        return text.replace(/\s*\([^)]*[a-zA-Z][^)]*\)\s*$/, '').trim();
+    }
+
     function handleClaudeCodeMessage(msg) {
         console.log('[Claude Code] Received message type:', msg.type);
 
@@ -507,15 +512,17 @@ document.addEventListener("DOMContentLoaded", () => {
         } else if (msg.type === 'working') {
             setChatProcessingState(true);
         } else if (msg.type === 'assistant' && msg.text) {
-            // Display assistant response
-            addMessage("assistant", msg.text);
+            // Strip English translations from display
+            const displayText = stripEnglishTranslation(msg.text);
+            addMessage("assistant", displayText);
 
             // Handle voice synthesis via narrationPlan
             if (msg.narrationPlan) {
                 console.log('[Claude Code] narrationPlan:', msg.narrationPlan);
                 if (msg.narrationPlan.should_narrate === true) {
-                    // Speak the text
-                    enqueueVoiceSynthesis(msg.narrationPlan.text);
+                    // Strip English translations from narration text too
+                    const textToSpeak = stripEnglishTranslation(msg.narrationPlan.text);
+                    enqueueVoiceSynthesis(textToSpeak);
                 }
                 // If should_narrate === false, don't speak (e.g., simple completion message)
             }
