@@ -275,6 +275,152 @@ http://localhost:3000/?mcp=1
 
 ---
 
+## 🔧 トラブルシューティング
+
+### 起動時に "Port XXXX is in use" と表示される
+
+**原因**: TCP ポートが既に他のプロセスで使用中です。
+
+**対策**:
+1. **自動フォールバック（推奨）**: dev-server は自動的に次のポート（3001, 3002...）を試します。ターミナルログで最終的に使用されたポート番号を確認してください
+2. **ポートを明示的に変更**: 
+   ```bash
+   PORT=4000 npm run dev
+   ```
+3. **既存プロセスを確認・終了**:
+   ```bash
+   # Windows
+   netstat -ano | findstr :3000
+   taskkill /PID <PID> /F
+   
+   # Mac/Linux
+   lsof -i :3000
+   kill -9 <PID>
+   ```
+
+### "Claude Code への接続に失敗" エラーが表示される
+
+**原因**: Claude CLI がインストールされていないか、PATH に含まれていません。
+
+**対策**:
+1. Claude Code CLI をインストール:
+   ```bash
+   npm install -g @anthropic-ai/claude
+   ```
+2. PATH を確認:
+   ```bash
+   # Windows
+   where claude
+   
+   # Mac/Linux
+   which claude
+   ```
+   出力がない場合は、Claude Code CLI が正しくインストールされていません
+
+3. ブラウザコンソール (F12) で詳細エラーを確認
+
+### システムプロンプトが読み込まれない
+
+**原因**: `prompts/claude-code-system.txt` ファイルが見つかりません。
+
+**対策**:
+1. ファイルが存在するか確認:
+   ```bash
+   ls -la prompts/claude-code-system.txt
+   ```
+
+2. カスタムプロンプトを使用する場合:
+   ```bash
+   CLAUDE_SYSTEM_PROMPT_FILE=path/to/custom-prompt.txt npm run dev
+   ```
+
+3. ファイルが見つからない場合、dev-server は自動的に埋め込み prompts を使用します（警告メッセージが表示されます）
+
+### WebSocket 接続がタイムアウトする
+
+**原因**: ネットワーク設定またはファイアウォールの問題です。
+
+**対策**:
+1. ブラウザコンソール (F12) で WebSocket URL を確認:
+   ```javascript
+   console.log(window.claudeClient);
+   ```
+
+2. ファイアウォール設定を確認（Port 3000 が開いているか）
+
+3. 別ブラウザでテスト
+
+---
+
+## 🌐 環境変数リファレンス
+
+`.env.local` ファイルで以下の環境変数を設定できます。設定テンプレートは [.env.example](.env.example) を参照してください。
+
+### Claude Code Mode
+
+| 環境変数 | デフォルト | 説明 |
+|---------|-----------|------|
+| `PORT` | `3000` | HTTP サーバーのポート番号。使用中の場合は自動的に次のポートを試します |
+| `CLAUDE_MODEL` | `claude-haiku-4-5-20251001` | Claude モデル。例: `claude-3-5-sonnet`, `claude-opus-4-7` |
+| `CLAUDE_SYSTEM_PROMPT_FILE` | `prompts/claude-code-system.txt` | システムプロンプトのファイルパス。カスタムプロンプト使用時に指定 |
+| `CLAUDE_MCP_AUTO_APPROVE` | `true` | MCP ツール呼び出しの自動承認。開発時は `true`、本番環境では `false` |
+
+### LLM Provider
+
+| 環境変数 | 説明 |
+|---------|------|
+| `LLM_PROVIDER` | `claude-code`, `ollama`, または `gemini` を選択 |
+
+### Ollama Settings (LLM_PROVIDER=ollama)
+
+| 環境変数 | デフォルト | 説明 |
+|---------|-----------|------|
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama API エンドポイント |
+| `OLLAMA_MODEL` | `gemma4:e4b` | 使用する Ollama モデル |
+
+### Google Gemini Settings (LLM_PROVIDER=gemini)
+
+| 環境変数 | 説明 |
+|---------|------|
+| `GEMINI_API_KEY` | Google Gemini API キー（[Google AI Studio](https://makersuite.google.com/app/apikey) から取得） |
+| `GEMINI_MODEL` | Gemini モデル。デフォルト: `gemini-2.5-flash` |
+
+### その他
+
+| 環境変数 | デフォルト | 説明 |
+|---------|-----------|------|
+| `CAMERA_URL` | （未設定） | ESP32S3 カメラストリーム URL （オプション） |
+
+### 環境変数の設定方法
+
+#### 方法 1: `.env.local` ファイル（推奨）
+
+プロジェクトルートに `.env.local` を作成:
+```env
+PORT=3000
+CLAUDE_MODEL=claude-haiku-4-5-20251001
+LLM_PROVIDER=claude-code
+```
+
+#### 方法 2: シェルで直接設定
+
+```bash
+# Windows (PowerShell)
+$env:PORT="3000"; npm run dev
+
+# Mac/Linux
+PORT=3000 npm run dev
+```
+
+#### 方法 3: .env.example をコピー
+
+```bash
+cp .env.example .env.local
+# エディタで編集
+```
+
+---
+
 ## 📚 追加ドキュメント
 
 | ドキュメント | 説明 |

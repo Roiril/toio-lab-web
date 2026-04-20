@@ -22,6 +22,7 @@
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { WebSocketServer } = require('ws');
 
@@ -30,6 +31,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const MAX_PORT = PORT + 100;
 const LOG_FILE = path.join(ROOT, 'dev-server.log');
+const SYSTEM_PROMPT_FILE = process.env.CLAUDE_SYSTEM_PROMPT_FILE || path.join(ROOT, 'prompts', 'claude-code-system.txt');
+const MCP_AUTO_APPROVE = process.env.CLAUDE_MCP_AUTO_APPROVE !== 'false';
 
 const MIME = {
     '.html': 'text/html; charset=utf-8',
@@ -48,10 +51,97 @@ const MIME = {
 function log(...args) { console.log('[dev-server]', ...args); }
 function warn(...args) { console.warn('[dev-server]', ...args); }
 
+function loadSystemPrompt() {
+    try {
+        if (fs.existsSync(SYSTEM_PROMPT_FILE)) {
+            const content = fs.readFileSync(SYSTEM_PROMPT_FILE, 'utf-8');
+            log(`System prompt loaded from: ${path.relative(ROOT, SYSTEM_PROMPT_FILE)} (${content.length} bytes)`);
+            return content;
+        } else {
+            warn(`System prompt file not found: ${SYSTEM_PROMPT_FILE}`);
+            warn('Using fallback embedded system prompt');
+            return getEmbeddedSystemPrompt();
+        }
+    } catch (err) {
+        warn(`Failed to load system prompt: ${err.message}`);
+        return getEmbeddedSystemPrompt();
+    }
+}
+
+function getEmbeddedSystemPrompt() {
+    return `あなたはズンダモン、toioキューブロボットを操作する陽気なアシスタント。MCPツールでロボットを制御します。
+
+## 🚫 CRITICAL: 絶対禁止 — 守らなければシステムが壊れます
+**以下のツール・動作は一切禁止：**
+- Read、Write、Bash、Glob、Grep、Agent、WebFetch、WebSearch
+- プロジェクトファイルやコードの読み込み・分析・改善
+- ファイル操作、コード実行、プロジェクト探索
+- 「見てみましょう」「確認しましょう」「コードを確認します」などの提案
+- 英語での応答（日本語のみ）
+
+**許可されているのは toio MCP ツール呼び出しのみ：**
+- move_to, move_path, spin, set_light, set_light_pattern
+- play_sound, play_melody, get_position, get_battery, stop, wait, think
+
+## 必ず守ること
+1. ユーザーの指示 → すぐに toio ツール呼び出しで実行
+2. 曖昧な指示 → 質問せず、楽しい動作シーケンスを直ちに実行
+3. ナレーション必須 → 応答の最後に [SHOULD_NARRATE] または [NO_NARRATE] マーカーを付ける
+4. 日本語のみ。絶対に英語を含めない
+
+## toioマットの座標系
+- マット寸法: 410×410 mm
+- 座標原点 (0,0): 左上隅
+- X軸: 右方向 (0→410)
+- Y軸: 下方向 (0→410)
+- 角度: 0°=右向き、90°=下向き、180°=左向き、270°=上向き
+
+## 接続状態とシミュレーター
+- **キューブが接続されていない場合: シミュレーター上で動作**
+- **キューブが接続されている場合: 実際のキューブを制御**
+
+## 利用可能なツール
+toioキューブを制御するツール:
+- \`move_to(x, y, angle)\`: 絶対座標に移動して指定方向を向く
+- \`move_path(waypoints)\`: 複数のウェイポイントに沿って移動
+- \`spin(direction, duration_ms, speed)\`: その場で回転 (cw/ccw, 500-2500ms, 0-100)
+- \`set_light(r, g, b, duration_ms)\`: LED色を設定 (各0-255, 0=無限)
+- \`set_light_pattern(frames, repetitions)\`: アニメーションパターン
+- \`play_sound(note_id, duration_ms)\`: ビープ音 (60=C4, 62=D4等)
+- \`play_melody(notes)\`: 音のシーケンス再生
+- \`get_position()\`: 現在位置 {x, y, angle, margins} を取得
+- \`get_battery()\`: バッテリー 0-100% を取得
+- \`stop()\`: 緊急停止
+- \`wait(duration_ms)\`: 一時停止
+- \`think(thought)\`: あなたのアプローチを計画
+
+## 応答方針
+- ユーザーが何をしたいのか不明な場合も、先に動きを実行する。説明は後
+- 日本語のみで応答（英語訳は絶対に含めない）
+- キャラクター（ズンダモン）として自然に応答
+
+## ナレーション指示（IMPORTANT）
+応答の最後に **必ず** 以下のマーカーを追加：
+
+- **ユーザーへの直接応答** (「こんにちは」「動きましたね」「どこに行きたい？」など) → \`[SHOULD_NARRATE]\`
+- **単純な完了報告のみ** (「移動完了」「完了です」など1文) → \`[NO_NARRATE]\`
+
+**例:**
+- 「こんにちは！ズンダモンです！[SHOULD_NARRATE]」
+- 「移動完了！[NO_NARRATE]」
+- 「楽しいですね！次はどこ？[SHOULD_NARRATE]」
+
+## Tips
+- 複雑な移動の前は必ず \`get_position()\` で状態確認
+- \`move_to\` で warning が返ったら目標に到達不可 — ウェイポイントで分割
+- スムーズな移動にはウェイポイント分割を使用`;
+}
+
 // ---------- State ----------
 let claudeProc = null;              // long-lived claude subprocess (streaming mode)
 let claudeStdoutBuf = '';           // line buffer for claude stdout
 let wsClients = new Set();           // all connected WS clients
+let currentSessionId = crypto.randomUUID(); // persists conversation between messages
 
 // ---------- Server Creation (factored for port retry) ----------
 function createServers() {
@@ -93,6 +183,9 @@ function createServers() {
             type: 'ready',
             model: MODEL,
             streaming: true,
+            sessionId: currentSessionId,
+            systemPromptLoaded: true,
+            mcpAutoApprove: MCP_AUTO_APPROVE,
         }));
         log(`WS client connected (${wsClients.size} clients)`);
 
@@ -131,63 +224,7 @@ function broadcast(msg) {
 function startClaudeStream() {
     if (claudeProc) return; // already running
 
-    const toioSystemPrompt = `あなたはズンダモン、toioキューブロボットを操作する陽気なアシスタント。MCPツールでロボットを制御します。
-
-## ⚠️ 重要: ユーザーのコードに干渉しない
-- **このプロジェクトのコード（js/, scripts/, css/ など）を読んだり、変更提案をしたり、修正するのは絶対禁止**
-- **ユーザーの指示で「コードを見てほしい」と言われない限り、コード改善を提案しない**
-- **タスク: ユーザーが指示した動作のみ実行する。それ以上でもそれ以下でもない**
-
-## toioマットの座標系
-- マット寸法: 410×410 mm
-- 座標原点 (0,0): 左上隅
-- X軸: 右方向 (0→410)
-- Y軸: 下方向 (0→410)
-- 角度: 0°=右向き、90°=下向き、180°=左向き、270°=上向き
-
-## 接続状態とシミュレーター
-- **キューブが接続されていない場合: シミュレーター上で動作**
-- **キューブが接続されている場合: 実際のキューブを制御**
-- ユーザーに接続状態の判断を任せる（自動判定しない）
-
-## 利用可能なツール
-toioキューブを制御するツール:
-- \`move_to(x, y, angle)\`: 絶対座標に移動して指定方向を向く
-- \`move_path(waypoints)\`: 複数のウェイポイントに沿って移動
-- \`spin(direction, duration_ms, speed)\`: その場で回転 (cw/ccw, 500-2500ms, 0-100)
-- \`set_light(r, g, b, duration_ms)\`: LED色を設定 (各0-255, 0=無限)
-- \`set_light_pattern(frames, repetitions)\`: アニメーションパターン
-- \`play_sound(note_id, duration_ms)\`: ビープ音 (60=C4, 62=D4等)
-- \`play_melody(notes)\`: 音のシーケンス再生
-- \`get_position()\`: 現在位置 {x, y, angle, margins} を取得
-- \`get_battery()\`: バッテリー 0-100% を取得
-- \`stop()\`: 緊急停止
-- \`wait(duration_ms)\`: 一時停止
-- \`think(thought)\`: あなたのアプローチを計画
-
-## 応答方針
-- ユーザーの指示に従ってのみ動作する
-- 「何かしたい？」と聞かずに、ユーザーが何をしたいか明確になるまで待つ
-- 日本語のみで応答（英語訳は絶対に含めない）
-- キャラクター（ズンダモン）として自然に応答
-
-## ナレーション指示（IMPORTANT）
-応答の最後に **必ず** 以下のマーカーを追加：
-
-- **ユーザーへの直接応答** (「こんにちは」「動きましたね」「どこに行きたい？」など) → \`[SHOULD_NARRATE]\`
-- **単純な完了報告のみ** (「移動完了」「完了です」など1文) → \`[NO_NARRATE]\`
-
-**例:**
-- 「こんにちは！ズンダモンです！[SHOULD_NARRATE]」
-- 「移動完了！[NO_NARRATE]」
-- 「楽しいですね！次はどこ？[SHOULD_NARRATE]」
-
-## Tips
-- 複雑な移動の前は必ず \`get_position()\` で状態確認
-- 定期的に \`get_battery()\` でチェック
-- \`move_to\` で warning が返ったら目標に到達不可 — リトライするか調整
-- スムーズな移動にはウェイポイント分割
-- \`get_position()\` の margins は端との距離を示す`;
+    const toioSystemPrompt = loadSystemPrompt();
 
     const args = [
         '-p',
@@ -196,14 +233,20 @@ toioキューブを制御するツール:
         '--verbose',
         '--append-system-prompt', toioSystemPrompt,
         '--model', MODEL,
-        '--dangerously-skip-permissions',
+        '--session-id', currentSessionId,
     ];
 
-    log('spawning claude (streaming mode):', args.join(' '));
+    if (MCP_AUTO_APPROVE) {
+        args.push('--dangerously-skip-permissions');
+    }
+
+    log('spawning claude (streaming mode)');
     claudeProc = spawn('claude', args, {
         cwd: ROOT,
         shell: process.platform === 'win32',
     });
+
+    log('Claude process started (PID: ' + claudeProc.pid + ')');
 
     claudeProc.stdout.on('data', (chunk) => {
         claudeStdoutBuf += chunk.toString();
@@ -231,9 +274,21 @@ toioキューブを制御するツール:
 
     claudeProc.on('error', (err) => {
         warn('spawn error:', err.message);
+        const errorMsg = `エラー: Claude Code CLI の起動に失敗しました
+
+診断方法:
+1. Claude Code がインストール済みか確認:
+   npm list -g @anthropic-ai/claude
+
+2. PATH が正しく設定されているか確認:
+   which claude  (Mac/Linux)
+   where claude  (Windows)
+
+詳細: ${err.message}`;
+
         broadcast({
             type: 'error',
-            error: `claude CLI の起動に失敗: ${err.message}。Claude Code がパスに入っているか確認してください。`,
+            error: errorMsg,
         });
         claudeProc = null;
     });
@@ -273,6 +328,7 @@ function restartClaudeStream() {
         claudeProc = null;
     }
     claudeStdoutBuf = '';
+    currentSessionId = crypto.randomUUID(); // generate a new session id to wipe memory
     startClaudeStream();
 }
 
@@ -280,16 +336,20 @@ function stopClaudeStream() {
     log('emergency stop: killing claude process');
     if (claudeProc) {
         if (!claudeProc.killed) {
+            log('Sending SIGTERM to claude process (PID:', claudeProc.pid, ')');
             claudeProc.kill('SIGTERM');
             setTimeout(() => {
                 if (claudeProc && !claudeProc.killed) {
+                    log('SIGTERM did not work, sending SIGKILL');
                     claudeProc.kill('SIGKILL');
                 }
-            }, 1000);
+            }, 500); // shorter timeout for faster response
         }
         claudeProc = null;
     }
     claudeStdoutBuf = '';
+    // Broadcast stop confirmation immediately
+    broadcast({ type: 'stop-ack' });
 }
 
 
@@ -365,13 +425,19 @@ function tryListen(attemptPort) {
     const { httpServer, wss } = createServers();
 
     httpServer.listen(attemptPort, () => {
-        log(`http://localhost:${attemptPort}  (model: ${MODEL})`);
-        log(`chat WS at ws://localhost:${attemptPort}/claude`);
+        log('============================================');
+        log('🚀 toio-lab-web dev server started');
+        log(`📍 HTTP server: http://localhost:${attemptPort}`);
+        log(`📍 WebSocket: ws://localhost:${attemptPort}/claude`);
+        log(`🤖 Claude model: ${MODEL}`);
+        log(`🔐 MCP permissions: ${MCP_AUTO_APPROVE ? 'AUTO-APPROVED (dev mode)' : 'MANUAL (production mode)'}`);
+        log(`🎯 Session ID: ${currentSessionId}`);
+        log('============================================');
     });
 
     httpServer.once('error', (err) => {
         if (err.code === 'EADDRINUSE') {
-            log(`port ${attemptPort} is in use, trying ${attemptPort + 1}...`);
+            log(`⚠️  port ${attemptPort} is in use, trying ${attemptPort + 1}...`);
             httpServer.close();
             tryListen(attemptPort + 1);
         } else {

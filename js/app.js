@@ -53,7 +53,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const toioBle = new ToioBLE();
     const toioSim = new ToioSim(spatialAwareness);
 
-    const combinedToio = new ToioCombined(toioSim, toioBle);
+    const combinedToio = window.combinedToio = new ToioCombined(toioSim, toioBle);
 
     // LocalStorage を優先し、未設定時のみ config.js にフォールバック
     const savedProvider = localStorage.getItem('llm_provider') || window.APP_CONFIG?.LLM_PROVIDER || 'claude-code';
@@ -91,10 +91,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     let llmClient;
+    let claudeSessionId = null;
+
     if (savedProvider === 'ollama') {
         llmClient = new OllamaClient(savedOllamaBaseUrl, savedOllamaModel);
+        console.log('[App Init] LLM Provider: Ollama', savedOllamaBaseUrl);
     } else if (savedProvider === 'claude-code') {
         // Claude Code mode: initialize ClaudeChatClient for dev-server communication
+        console.log('[App Init] LLM Provider: Claude Code');
+        console.log('[App Init] Status: Connecting to dev-server...');
         window.claudeClient = new ClaudeChatClient({
             onMessage: (msg) => {
                 handleClaudeCodeMessage(msg);
@@ -111,6 +116,7 @@ document.addEventListener("DOMContentLoaded", () => {
         llmClient = null; // Claude Code doesn't use traditional LLM client
     } else {
         llmClient = new GeminiClient(savedApiKey, savedGeminiModel);
+        console.log('[App Init] LLM Provider: Gemini');
     }
     const sessionMemory = new SessionMemory();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
@@ -235,6 +241,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (confirm('Claude Code プロセスを強制停止しますか？')) {
             if (window.claudeClient && window.claudeClient.stop()) {
                 addMessage("system", "🛑 Claude Code に停止要求を送信しました");
+                // Reset UI state immediately
+                isAgentRunning = false;
+                setChatProcessingState(false);
+                if (currentThinkingNode) {
+                    currentThinkingNode.classList.remove('thinking');
+                    currentThinkingNode = null;
+                }
             } else {
                 addMessage("system", "⚠️ Claude Code への接続がありません");
             }
@@ -254,9 +267,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
     settingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
     closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
-    
     clearMemoryBtn.addEventListener('click', () => {
         sessionMemory.clear();
+        if (llmProviderSelect && llmProviderSelect.value === 'claude-code' && window.claudeClient) {
+            window.claudeClient.reset();
+        }
         alert("セッション記憶をクリアしました。");
     });
 
@@ -402,7 +417,12 @@ document.addEventListener("DOMContentLoaded", () => {
                 reason = "Ready";
             } else {
                 ok = false;
-                reason = "dev-server に接続中... ブラウザコンソールを確認してください";
+                reason = `dev-server に接続中...
+
+トラブルシューティング:
+1. ターミナルで npm run dev を実行
+2. ブラウザコンソール (F12) でエラーを確認
+3. Port 3000 が使用中? netstat -an | grep 3000`;
             }
         } else {
             // Ollama or Gemini mode
@@ -517,6 +537,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (msg.type === 'ready') {
             // Initial ready message from dev-server
             console.log('[Claude Code] dev-server ready, model:', msg.model);
+            if (msg.sessionId) {
+                claudeSessionId = msg.sessionId;
+                console.log('[App Init] Session resumption:', claudeSessionId.substring(0, 8) + '...');
+                addMessage('system', `✅ Claude Code モード: 準備完了\n📡 Session ID: ${claudeSessionId.substring(0, 12)}...\n💡 コマンド例: 「前に進んで」「赤色に光らせて」`);
+            }
         } else if (msg.type === 'working') {
             setChatProcessingState(true);
         } else if (msg.type === 'assistant' && msg.text) {
