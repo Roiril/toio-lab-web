@@ -172,3 +172,118 @@ ToolExecutor で実行
 | `get_position` | 現在位置・向き・マット端までの余裕を取得 |
 | `get_battery` | バッテリー残量を取得 |
 | `think` | LLMの内部思考（計画の明示化） |
+
+---
+
+## 🎤 音声合成機能 (Voice Synthesis)
+
+toio-lab-web は Zundamon（ズンダモン）キャラクターの **日本語音声フィードバック** をサポートしています。
+
+### 特徴
+
+- **VOICEVOX 統合**: 高品質な日本語音声合成（別途インストール必須）
+- **Web Speech API フォールバック**: VOICEVOX が利用不可時は自動的にブラウザのネイティブTTSに切り替え
+- **自動ナレーション**: Claude が重要な応答を自動的に音声で出力
+- **日本語対応**: 日本語での自然な会話と音声出力
+
+### VOICEVOX セットアップ
+
+VOICEVOX を使用する場合は別途インストールが必要です：
+
+```bash
+# Windows: https://voicevox.port.in.net/
+# macOS/Linux: https://github.com/VOICEVOX/voicevox_engine
+
+# インストール後、ポート 50021 で起動
+voicevox_engine
+```
+
+詳細は [VOICEVOX_SETUP_GUIDE.md](VOICEVOX_SETUP_GUIDE.md) を参照してください。
+
+---
+
+## 🧪 テストスクリプト
+
+### dev-server 接続テスト
+
+```bash
+# dev-server が起動しているか、WebSocket 接続が正常か確認
+npm run dev &
+node test-connection.js
+```
+
+**出力例:**
+```
+[test] Trying port 3000...
+✅ Connected to port 3000!
+[test] Sending test message: こんにちは
+[response 1] type='ready'
+[response 2] type='working'
+[response 3] type='assistant' | text="こんにちは！ズンダモンです！..."
+[response 4] type='result'
+
+✅ Test completed successfully on port 3000!
+```
+
+### 音声合成テスト（ブラウザコンソール）
+
+アプリを起動後、ブラウザコンソール (F12) で実行：
+
+```javascript
+// VOICEVOX 利用可能性確認
+test_voicevoxStatus = async () => {
+  const response = await fetch('http://localhost:50021/version');
+  console.log('VOICEVOX:', response.ok ? '✅ 利用可能' : '❌ 利用不可');
+};
+test_voicevoxStatus();
+
+// 直接音声合成テスト
+test_directVoiceSynthesis = async () => {
+  await window.bridge.executor.toio.speakText('テスト音声です', 'ja');
+};
+test_directVoiceSynthesis();
+```
+
+詳細は [VOICE_SYNTHESIS_TEST_GUIDE.md](VOICE_SYNTHESIS_TEST_GUIDE.md) を参照してください。
+
+---
+
+## 🔌 Claude Code 統合（実験機能）
+
+このプロジェクトは **Claude Code** の MCP (Model Context Protocol) との統合をサポートしています。
+
+### セットアップ
+
+```bash
+# Claude CLI がインストールされていることを確認
+which claude
+
+# dev-server を起動
+npm run dev
+
+# ブラウザで ?mcp=1 パラメータを付けてアクセス
+http://localhost:3000/?mcp=1
+```
+
+### 機能
+
+- **MCP Tool Bridge**: Claude がブラウザ経由で toio を制御
+- **リアルタイムフィードバック**: tool 実行結果がすぐに Claude に返される
+- **Zundamon キャラ統合**: Claude が Zundamon として自動的に音声ナレーション
+
+詳細は [js/mcp-bridge.js](js/mcp-bridge.js) と [VOICE_SYNTHESIS_SYSTEM.md](VOICE_SYNTHESIS_SYSTEM.md) を参照してください。
+
+---
+
+## 📚 追加ドキュメント
+
+| ドキュメント | 説明 |
+|------------|------|
+| [VOICE_SYNTHESIS_INDEX.md](VOICE_SYNTHESIS_INDEX.md) | 音声合成システムのナビゲーションガイド |
+| [VOICE_SYNTHESIS_SYSTEM.md](VOICE_SYNTHESIS_SYSTEM.md) | アーキテクチャ・実装詳細 |
+| [VOICE_SYNTHESIS_EXAMPLES.md](VOICE_SYNTHESIS_EXAMPLES.md) | コード例・統合パターン |
+| [VOICE_SYNTHESIS_TEST_GUIDE.md](VOICE_SYNTHESIS_TEST_GUIDE.md) | テスト手順・デバッグ方法 |
+| [VOICEVOX_SETUP_GUIDE.md](VOICEVOX_SETUP_GUIDE.md) | VOICEVOX インストール・設定 |
+| [USER_EXPERIENCE_FLOW.md](USER_EXPERIENCE_FLOW.md) | ユーザー操作フロー・UX設計 |
+
+---
