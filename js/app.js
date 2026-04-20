@@ -108,6 +108,10 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentThinkingNode = null;
     let hasSyncedInitialPosition = false;
 
+    // Narration state (deduplication & character consistency)
+    let narrationHistory = [];
+    const MAX_HISTORY = 15;
+
     // Agent Loop initialization (skipped when running as an MCP bridge)
     let agentLoop = llmClient
         ? new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, { onStep: handleAgentStep })
@@ -188,6 +192,11 @@ document.addEventListener("DOMContentLoaded", () => {
                         console.log('[ClaudeChat] claude process disconnected');
                         if (isProcessingChat) setChatProcessingState(false);
                         break;
+                    case 'narration_plan': {
+                        // Auto-execute narration plan from Claude
+                        executeNarrationPlan(msg.plan);
+                        break;
+                    }
                 }
             },
             onStatus: ({ state }) => {
@@ -610,6 +619,56 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function scrollChat() {
         chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+
+    async function executeNarrationPlan(plan) {
+        if (!plan || !plan.narrations || !Array.isArray(plan.narrations)) {
+            console.warn('[executeNarrationPlan] Invalid plan:', plan);
+            return;
+        }
+
+        for (const narration of plan.narrations) {
+            if (!narration.text || typeof narration.text !== 'string') {
+                console.warn('[executeNarrationPlan] Skipping narration with missing/invalid text:', narration);
+                continue;
+            }
+
+            // Skip if this exact narration was recently played (deduplication)
+            if (narrationHistory.includes(narration.text)) {
+                console.log('[executeNarrationPlan] skip (recent):', narration.text.slice(0, 50));
+                continue;
+            }
+
+            // Apply delay if specified
+            const delayMs = narration.delay_ms || 0;
+            if (delayMs > 0) {
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+            }
+
+            // Call speak_text via MCP bridge
+            try {
+                if (!bridge || !bridge.isConnected()) {
+                    console.warn('[executeNarrationPlan] MCP bridge not connected');
+                    continue;
+                }
+
+                const timing = narration.timing || 'default';
+                console.log(`[executeNarrationPlan] (${timing})`, narration.text.slice(0, 60));
+
+                const result = await bridge.call('speak_text', {
+                    text: narration.text,
+                    language: narration.language || 'ja'
+                });
+
+                // Track in history to avoid repetition
+                narrationHistory.push(narration.text);
+                if (narrationHistory.length > MAX_HISTORY) {
+                    narrationHistory.shift();
+                }
+            } catch (err) {
+                console.error('[executeNarrationPlan] Failed to execute narration:', err.message);
+            }
+        }
     }
 
     function escapeHTML(str) {

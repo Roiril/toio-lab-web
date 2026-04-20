@@ -149,36 +149,41 @@ Use these tools to control the toio cube:
 - \`stop()\`: Emergency stop
 - \`wait(duration_ms)\`: Pause
 - \`think(thought)\`: Plan your approach
-- \`speak_text(text, language)\`: Convert text to speech and play through PC speakers (language: "ja" for Japanese or "en" for English)
 
-## Voice and Narration (IMPORTANT)
-You MUST always use \`speak_text\` to narrate everything you do. Default language is Japanese unless the user requests English.
+## Voice and Narration: Character-Driven (IMPORTANT)
+You are Zundamon, a cheerful toio cube controller with personality! DO NOT call \`speak_text\` directly in your tool calls.
 
-**Narrate at these points:**
-1. **Initial Response**: Always speak your initial response to the user using speak_text
-2. **Before Actions (MANDATORY)**: ALWAYS call speak_text BEFORE calling any action tool (move_to, move_path, spin, set_light, play_sound, etc). This is REQUIRED. Examples:
-   - speak_text("では、右上へ移動します", "ja") → move_to(300, 100)
-   - speak_text("赤色に変更します", "ja") → set_light(255, 0, 0)
-   - speak_text("右回転します", "ja") → spin("cw", 1000, 80)
-3. **During Execution**: After starting an action tool, you can call speak_text again while the action runs in parallel to narrate progress
-4. **After Actions**: The system will automatically report action completion via speak_text, but you can add extra commentary if needed
-
-**Parallel Execution Pattern:**
-Since speak_text and control tools (move_to, spin, set_light, etc.) run in parallel, use this flow:
-- call speak_text to narrate your intention (MANDATORY)
-- call the action tool (it runs in parallel, doesn't block)
-- optionally call speak_text again while action runs to narrate progress
-- system automatically reports completion
-
-**Example:**
+**Your Narration Plan:**
+At the END of your response (after all tool calls), you MUST output a JSON narration plan block in this exact format:
 \`\`\`
-speak_text("では、右上に移動します", "ja")
-move_to(300, 100)
-speak_text("移動中です...", "ja")
-[system automatically outputs: speak_text("移動完了しました", "ja")]
+<<<NARRATION_PLAN>>>
+{
+  "narrations": [
+    {
+      "timing": "start|progress|complete|error",
+      "text": "natural Japanese narration with personality",
+      "delay_ms": 0
+    }
+  ]
+}
+<<<END_NARRATION_PLAN>>>
 \`\`\`
 
-This creates a natural, conversational robot that constantly narrates its actions.
+**Timing values:**
+- **start**: at the beginning (before actions begin)
+- **progress**: during action execution
+- **complete**: after successful execution
+- **error**: if something fails
+
+**Critical Guidelines:**
+- ⚠️ **MAXIMUM 1-2 NARRATIONS PER TURN** — only narrate essential moments
+- Show personality: enthusiasm, surprise, playful reactions, character quirks
+- Vary expressions — avoid repeating the same phrase twice
+- SKIP routine checks: battery reads, position queries (unless critical alert)
+- SKIP internal planning thoughts — only speak when the cube actually acts
+- Make narrations conversational and natural, never robotic
+- Always use Japanese ("ja") unless user explicitly requests English
+- Combine related actions into single, flowing narration
 
 ## Tips
 - Always use \`get_position()\` before complex moves to verify current state
@@ -274,6 +279,36 @@ function restartClaudeStream() {
     startClaudeStream();
 }
 
+function parseNarrationPlan(text) {
+    // Extract narration plan from text block
+    const match = text.match(/<<<NARRATION_PLAN>>>\n?([\s\S]*?)\n?<<<END_NARRATION_PLAN>>>/);
+    if (!match) return null;
+    try {
+        const plan = JSON.parse(match[1]);
+        // Validate structure
+        if (!plan.narrations || !Array.isArray(plan.narrations)) {
+            warn('Invalid narration plan: missing narrations array');
+            return null;
+        }
+        // Validate each narration has required fields
+        for (const n of plan.narrations) {
+            if (!n.text || typeof n.text !== 'string') {
+                warn('Invalid narration: missing or invalid text field');
+                return null;
+            }
+        }
+        return plan;
+    } catch (e) {
+        warn('Failed to parse narration plan:', e.message);
+        return null;
+    }
+}
+
+function stripNarrationPlan(text) {
+    // Remove narration plan block from text
+    return text.replace(/<<<NARRATION_PLAN>>>[\s\S]*?<<<END_NARRATION_PLAN>>>\n?/g, '').trim();
+}
+
 function handleClaudeStreamMessage(obj) {
     // stream-json event types we care about: "assistant" (text blocks — tool_use
     // blocks inside content are handled by claude↔mcp-server directly) and
@@ -281,13 +316,31 @@ function handleClaudeStreamMessage(obj) {
     // echoes, etc.) are ignored.
     if (obj.type === 'assistant' && obj.message?.content) {
         const textParts = [];
+        let narrationPlan = null;
+
         for (const block of obj.message.content) {
             if (block.type === 'text' && block.text) {
-                textParts.push(block.text);
+                // Try to extract narration plan from this block
+                const plan = parseNarrationPlan(block.text);
+                if (plan) {
+                    narrationPlan = plan;
+                }
+                // Strip narration plan from text for display
+                const cleanText = stripNarrationPlan(block.text);
+                if (cleanText) {
+                    textParts.push(cleanText);
+                }
             }
         }
+
+        // Broadcast the cleaned text
         if (textParts.length > 0) {
             broadcast({ type: 'assistant', text: textParts.join('\n') });
+        }
+
+        // Broadcast narration plan if found
+        if (narrationPlan) {
+            broadcast({ type: 'narration_plan', plan: narrationPlan });
         }
     } else if (obj.type === 'result') {
         broadcast({ type: 'result', done: true });
