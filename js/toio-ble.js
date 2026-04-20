@@ -70,7 +70,7 @@ class ToioBLE {
      */
     _enqueueWrite(writeFn) {
         const queued = this._writeQueue.then(writeFn).catch(e => {
-            console.warn('[toio] BLE write error:', e);
+            console.warn('[toio] BLE write error:', e.name || 'Unknown', '-', e.message || e);
             throw e;
         });
         // Keep queue alive even when a write fails
@@ -615,6 +615,10 @@ class ToioBLE {
 
     async playSound(noteId = 60, durationMs = 500) {
         if (!this.isConnected) return;
+        if (!this.characteristics.sound) {
+            console.warn('[toio] playSound: sound characteristic not available');
+            return;
+        }
 
         return new Promise((resolve) => {
             const sendFn = () => {
@@ -625,20 +629,29 @@ class ToioBLE {
                     setTimeout(resolve, durationMs);
                 });
             };
-            this._enqueueWrite(sendFn).catch(() => resolve());
+            this._enqueueWrite(sendFn).catch((err) => {
+                console.warn('[toio] playSound failed:', err.message || err);
+                resolve();
+            });
         });
     }
 
     async playMelody(notes) {
         if (!this.isConnected || !notes || notes.length === 0) return;
+        if (!this.characteristics.sound) {
+            console.warn('[toio] playMelody: sound characteristic not available');
+            return;
+        }
 
         const BLE_MAX_NOTES = 16;
         let noteIdx = 0;
         let totalDurationMs = 0;
+        console.log(`[toio] playMelody: starting ${notes.length} notes in batches of ${BLE_MAX_NOTES}`);
 
         return new Promise((resolve) => {
             const sendNextBatch = () => {
                 if (noteIdx >= notes.length) {
+                    console.log(`[toio] playMelody: all ${noteIdx} notes sent, waiting ${totalDurationMs}ms for playback`);
                     setTimeout(resolve, totalDurationMs);
                     return Promise.resolve();
                 }
@@ -662,6 +675,8 @@ class ToioBLE {
                     buf[offset+2] = 0xff;
                 }
 
+                const currentBatch = noteIdx / BLE_MAX_NOTES + 1;
+                console.log(`[toio] playMelody: sending batch ${currentBatch}, notes ${noteIdx}-${noteIdx + batchSize - 1}`);
                 noteIdx += batchSize;
                 return this.characteristics.sound.writeValueWithoutResponse(buf);
             };
@@ -670,12 +685,15 @@ class ToioBLE {
                 const recursiveSend = () => {
                     return sendNextBatch().then(() => {
                         if (noteIdx < notes.length) {
-                            return recursiveSend();
+                            return new Promise(r => setTimeout(r, 100)).then(() => recursiveSend());
                         }
                     });
                 };
                 return recursiveSend();
-            }).catch(() => resolve());
+            }).catch((err) => {
+                console.error('[toio] playMelody failed:', err.name || 'Unknown', '-', err.message || err);
+                resolve();
+            });
         });
     }
 

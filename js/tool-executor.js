@@ -33,6 +33,7 @@ class ToolExecutor {
         }
 
         console.log(`Executing Tool [${funcName}]:`, args);
+        console.log(`[ToolExecutor] Device connected: ${this.toio.isConnected}, Device type: ${this.toio.constructor.name}`);
         let resultData = {};
 
         try {
