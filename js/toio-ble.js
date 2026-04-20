@@ -620,7 +620,7 @@ class ToioBLE {
             return;
         }
 
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const sendFn = () => {
                 let dur = durationMs > 0 ? Math.floor(durationMs / 10) : 0;
                 if (dur > 255) dur = 255;
@@ -631,7 +631,7 @@ class ToioBLE {
             };
             this._enqueueWrite(sendFn).catch((err) => {
                 console.warn('[toio] playSound failed:', err.message || err);
-                resolve();
+                reject(err);
             });
         });
     }
@@ -648,7 +648,7 @@ class ToioBLE {
         let totalDurationMs = 0;
         console.log(`[toio] playMelody: starting ${notes.length} notes in batches of ${BLE_MAX_NOTES}`);
 
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const sendNextBatch = () => {
                 if (noteIdx >= notes.length) {
                     console.log(`[toio] playMelody: all ${noteIdx} notes sent, waiting ${totalDurationMs}ms for playback`);
@@ -685,14 +685,14 @@ class ToioBLE {
                 const recursiveSend = () => {
                     return sendNextBatch().then(() => {
                         if (noteIdx < notes.length) {
-                            return new Promise(r => setTimeout(r, 100)).then(() => recursiveSend());
+                            return new Promise(r => setTimeout(r, 200)).then(() => recursiveSend());
                         }
                     });
                 };
                 return recursiveSend();
             }).catch((err) => {
                 console.error('[toio] playMelody failed:', err.name || 'Unknown', '-', err.message || err);
-                resolve();
+                reject(err);
             });
         });
     }

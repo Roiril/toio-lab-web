@@ -18,7 +18,8 @@ class ToolExecutor {
     }
 
     // 同時実行しても安全なツール（順序依存・副作用干渉なし）
-    static PARALLELIZABLE = new Set(["set_light", "play_sound", "set_light_pattern", "play_melody", "think", "get_position", "get_battery"]);
+    // NOTE: play_sound と play_melody は同じ sound characteristic を使用するため、同時実行不可
+    static PARALLELIZABLE = new Set(["set_light", "set_light_pattern", "think", "get_position", "get_battery"]);
 
     async _execute(call) {
         // BLE通信の安定性のため、コマンド間にわずかな待機時間を設ける

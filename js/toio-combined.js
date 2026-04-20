@@ -52,11 +52,13 @@ class ToioCombined {
     }
 
     async playMelody(notes) {
+        const blePromise = this.ble.isConnected && this.ble.playMelody
+            ? this.ble.playMelody(notes)
+            : Promise.resolve();
+
         await Promise.all([
             this.sim.playMelody(notes),
-            this.ble.isConnected && this.ble.playMelody
-                ? this._bleSafe(this.ble.playMelody(notes), 'playMelody')
-                : Promise.resolve()
+            blePromise
         ]);
     }
 
