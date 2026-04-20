@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const combinedToio = new ToioCombined(toioSim, toioBle);
 
     // LocalStorage を優先し、未設定時のみ config.js にフォールバック
-    const savedProvider = localStorage.getItem('llm_provider') || window.APP_CONFIG?.LLM_PROVIDER || 'ollama';
+    const savedProvider = localStorage.getItem('llm_provider') || window.APP_CONFIG?.LLM_PROVIDER || 'claude-code';
     const savedApiKey = localStorage.getItem('gemini_api_key') || window.APP_CONFIG?.GEMINI_API_KEY || '';
     const savedGeminiModel = localStorage.getItem('gemini_model') || window.APP_CONFIG?.GEMINI_MODEL || 'gemini-2.5-flash';
     const savedOllamaBaseUrl = localStorage.getItem('ollama_base_url') || window.APP_CONFIG?.OLLAMA_URL || 'http://localhost:11434';
@@ -75,6 +75,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (llmProviderSelect.value === 'ollama') {
             geminiSettingsGroup.style.display = 'none';
             ollamaSettingsGroup.style.display = 'block';
+        } else if (llmProviderSelect.value === 'claude-code') {
+            geminiSettingsGroup.style.display = 'none';
+            ollamaSettingsGroup.style.display = 'none';
         } else {
             geminiSettingsGroup.style.display = 'block';
             ollamaSettingsGroup.style.display = 'none';
@@ -262,14 +265,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (newProvider === 'ollama') {
             llmClient = new OllamaClient(newOllamaBaseUrl, newOllamaModel);
+        } else if (newProvider === 'claude-code') {
+            // Claude Code mode: initialize ClaudeChatClient for dev-server communication
+            if (!window.claudeClient) {
+                window.claudeClient = new ClaudeChatClient({
+                    onMessage: (msg) => console.log('[Claude Code] Message:', msg.type),
+                    onStatus: (status) => console.log('[Claude Code] Status:', status.state)
+                });
+            }
+            window.claudeClient.connect();
+            llmClient = null;
         } else {
             llmClient = new GeminiClient(newApiKey, newGeminiModel);
         }
 
-        // Re-init agent loop
-        agentLoop = new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
-            onStep: handleAgentStep
-        });
+        // Re-init agent loop only if llmClient is set
+        if (llmClient) {
+            agentLoop = new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
+                onStep: handleAgentStep
+            });
+        }
 
         const newCameraUrl = cameraUrlInput.value.trim();
         localStorage.setItem('camera_url', newCameraUrl);
@@ -365,28 +380,48 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     async function checkLlmConnection() {
-        const isOllama = llmClient instanceof OllamaClient;
-        const providerName = isOllama ? "Ollama" : "Gemini";
-        llmStatusText.innerText = `${providerName}: Checking...`;
-        
-        let ok, reason;
-        try {
-            const res = await llmClient.checkConnection();
-            if (typeof res === "object") {
-                ok = res.ok;
-                reason = res.reason;
+        let providerName, ok, reason;
+
+        if (!llmClient) {
+            // Claude Code mode
+            providerName = "Claude Code";
+            llmStatusText.innerText = `${providerName}: Checking...`;
+            const isReady = window.claudeClient && window.claudeClient.isReady();
+            if (isReady) {
+                ok = true;
+                reason = "Ready";
             } else {
-                ok = res;
-                reason = "Unknown Error";
+                ok = false;
+                reason = "Waiting for dev-server connection";
             }
-        } catch (e) {
-            ok = false;
-            reason = e.message;
+        } else {
+            // Ollama or Gemini mode
+            const isOllama = llmClient instanceof OllamaClient;
+            providerName = isOllama ? "Ollama" : "Gemini";
+            llmStatusText.innerText = `${providerName}: Checking...`;
+
+            try {
+                const res = await llmClient.checkConnection();
+                if (typeof res === "object") {
+                    ok = res.ok;
+                    reason = res.reason;
+                } else {
+                    ok = res;
+                    reason = "Unknown Error";
+                }
+            } catch (e) {
+                ok = false;
+                reason = e.message;
+            }
         }
 
         if (ok) {
             llmStatusDot.className = "dot connected";
-            llmStatusText.innerText = `${providerName}: Ready (${llmClient.model})`;
+            if (llmClient && llmClient.model) {
+                llmStatusText.innerText = `${providerName}: Ready (${llmClient.model})`;
+            } else {
+                llmStatusText.innerText = `${providerName}: Ready`;
+            }
         } else {
             llmStatusDot.className = "dot disconnected";
             llmStatusText.innerText = `${providerName}: Error — ${reason || "Connection failed"}`;
@@ -399,19 +434,29 @@ document.addEventListener("DOMContentLoaded", () => {
         const text = chatInput.value.trim();
         chatInput.value = "";
 
-        // カメラ添付画像があればLLMクライアントにセット
-        if (pendingCameraCapture) {
-            llmClient.pendingImage = pendingCameraCapture;
-            pendingCameraCapture = null;
-            clearCameraAttach();
-        }
-
         setChatProcessingState(true);
         isAgentRunning = true;
         addMessage("user", text);
 
         try {
-            await agentLoop.run(text, agentTools);
+            if (!llmClient) {
+                // Claude Code mode: send via WebSocket to dev-server
+                if (window.claudeClient && window.claudeClient.isReady()) {
+                    window.claudeClient.send(text);
+                } else {
+                    addMessage("system", "⚠️ Claude Code への接続がありません。設定を確認してください。");
+                }
+            } else {
+                // Agent Loop mode (Ollama or Gemini)
+                // カメラ添付画像があればLLMクライアントにセット
+                if (pendingCameraCapture) {
+                    llmClient.pendingImage = pendingCameraCapture;
+                    pendingCameraCapture = null;
+                    clearCameraAttach();
+                }
+
+                await agentLoop.run(text, agentTools);
+            }
         } catch (e) {
             addMessage("system", "エラーが発生しました: " + e.message);
         } finally {
