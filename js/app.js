@@ -97,8 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Claude Code mode: initialize ClaudeChatClient for dev-server communication
         window.claudeClient = new ClaudeChatClient({
             onMessage: (msg) => {
-                // Messages will be handled by the chat UI integration
-                console.log('[Claude Code] Message:', msg.type);
+                handleClaudeCodeMessage(msg);
             },
             onStatus: (status) => {
                 console.log('[Claude Code] Status:', status.state);
@@ -496,6 +495,28 @@ document.addEventListener("DOMContentLoaded", () => {
             sendBtn.disabled = false;
         } else {
             sendBtn.disabled = true;
+        }
+    }
+
+    function handleClaudeCodeMessage(msg) {
+        console.log('[Claude Code] Received message type:', msg.type);
+
+        if (msg.type === 'working') {
+            setChatProcessingState(true);
+        } else if (msg.type === 'assistant' && msg.text) {
+            // Display assistant response
+            addMessage("assistant", msg.text);
+        } else if (msg.type === 'result') {
+            // End of turn
+            setChatProcessingState(false);
+        } else if (msg.type === 'error') {
+            // Display error
+            addMessage("system", `エラー: ${msg.error}`);
+            setChatProcessingState(false);
+        } else if (msg.type === 'disconnected') {
+            // dev-server disconnected
+            addMessage("system", "⚠️ dev-server との接続が切断されました");
+            setChatProcessingState(false);
         }
     }
 
