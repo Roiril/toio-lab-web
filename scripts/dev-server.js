@@ -48,8 +48,9 @@ function log(...args) { console.log('[dev-server]', ...args); }
 function warn(...args) { console.warn('[dev-server]', ...args); }
 
 // ---------- State ----------
-let claudeSessionId = null;   // persisted across turns via --resume
-let activeRun = null;          // promise of the currently-running claude invocation
+let claudeProc = null;              // long-lived claude subprocess (streaming mode)
+let claudeStdoutBuf = '';           // line buffer for claude stdout
+let wsClients = new Set();           // all connected WS clients
 
 // ---------- Server Creation (factored for port retry) ----------
 function createServers() {
@@ -84,96 +85,145 @@ function createServers() {
     });
 
     wss.on('connection', (ws) => {
+        wsClients.add(ws);
         ws.send(JSON.stringify({
             type: 'ready',
             model: MODEL,
-            sessionId: claudeSessionId,
-            busy: !!activeRun,
+            streaming: true,
         }));
+        log(`WS client connected (${wsClients.size} clients)`);
 
         ws.on('message', async (raw) => {
             let msg;
             try { msg = JSON.parse(raw.toString()); } catch { return; }
 
             if (msg.type === 'user' && typeof msg.text === 'string' && msg.text.trim()) {
-                if (activeRun) {
-                    ws.send(JSON.stringify({ type: 'error', error: 'Claudeが別のメッセージを処理中です。完了を待ってください。' }));
-                    return;
-                }
-                activeRun = runClaude(msg.text, ws);
-                try { await activeRun; } finally { activeRun = null; }
+                sendToClaudeStream(msg.text);
             } else if (msg.type === 'reset') {
-                claudeSessionId = null;
-                ws.send(JSON.stringify({ type: 'reset-ack' }));
+                restartClaudeStream();
+                broadcast({ type: 'reset-ack' });
             }
+        });
+
+        ws.on('close', () => {
+            wsClients.delete(ws);
+            log(`WS client disconnected (${wsClients.size} clients)`);
         });
     });
 
     return { httpServer, wss };
 }
 
-function runClaude(userText, ws) {
-    return new Promise((resolve) => {
-        const args = [
-            '-p', userText,
-            '--model', MODEL,
-            '--output-format', 'json',
-            '--dangerously-skip-permissions',
-        ];
-        if (claudeSessionId) {
-            args.push('--resume', claudeSessionId);
-        }
+// ---------- Claude Streaming Mode ----------
+function broadcast(msg) {
+    const str = JSON.stringify(msg);
+    for (const ws of wsClients) {
+        if (ws.readyState === 1) ws.send(str);
+    }
+}
 
-        log('claude', args.filter(a => a !== userText).join(' '), '"<user-text>"');
-        ws.send(JSON.stringify({ type: 'working' }));
+function startClaudeStream() {
+    if (claudeProc) return; // already running
 
-        const proc = spawn('claude', args, {
-            cwd: ROOT,
-            shell: process.platform === 'win32',
-        });
-        let stdout = '';
-        let stderr = '';
+    const args = [
+        '--input-format', 'stream-json',
+        '--output-format', 'stream-json',
+        '--model', MODEL,
+        '--dangerously-skip-permissions',
+    ];
 
-        proc.stdout.on('data', (d) => { stdout += d.toString(); });
-        proc.stderr.on('data', (d) => { stderr += d.toString(); });
-
-        proc.on('error', (err) => {
-            warn('spawn error:', err.message);
-            ws.send(JSON.stringify({
-                type: 'error',
-                error: `claude CLI の起動に失敗: ${err.message}。Claude Codeがパスに入っているか確認してください。`,
-            }));
-            resolve();
-        });
-
-        proc.on('close', (code) => {
-            if (code !== 0) {
-                warn(`claude exited ${code}:`, stderr.slice(0, 800));
-                ws.send(JSON.stringify({
-                    type: 'error',
-                    error: `claude exited ${code}. stderr: ${stderr.slice(0, 400) || '(empty)'}`,
-                }));
-                resolve();
-                return;
-            }
-            try {
-                const parsed = JSON.parse(stdout);
-                if (parsed.session_id) claudeSessionId = parsed.session_id;
-                const text = parsed.result ?? parsed.response ?? '';
-                ws.send(JSON.stringify({
-                    type: 'assistant',
-                    text: String(text),
-                    duration_ms: parsed.duration_ms,
-                    cost_usd: parsed.total_cost_usd,
-                    session_id: parsed.session_id,
-                }));
-            } catch (e) {
-                warn('JSON parse failed, sending raw stdout. err:', e.message);
-                ws.send(JSON.stringify({ type: 'assistant', text: stdout }));
-            }
-            resolve();
-        });
+    log('spawning claude (streaming mode):', args.join(' '));
+    claudeProc = spawn('claude', args, {
+        cwd: ROOT,
+        shell: process.platform === 'win32',
     });
+
+    claudeProc.stdout.on('data', (chunk) => {
+        claudeStdoutBuf += chunk.toString();
+        let idx;
+        while ((idx = claudeStdoutBuf.indexOf('\n')) >= 0) {
+            const line = claudeStdoutBuf.slice(0, idx);
+            claudeStdoutBuf = claudeStdoutBuf.slice(idx + 1);
+            if (!line.trim()) continue;
+            try {
+                const obj = JSON.parse(line);
+                handleClaudeStreamMessage(obj);
+            } catch (e) {
+                warn('parse error:', line.slice(0, 100));
+            }
+        }
+    });
+
+    claudeProc.stderr.on('data', (d) => {
+        const msg = d.toString();
+        if (msg.includes('error') || msg.includes('Error')) {
+            warn('claude stderr:', msg.slice(0, 200));
+        }
+    });
+
+    claudeProc.on('error', (err) => {
+        warn('spawn error:', err.message);
+        broadcast({
+            type: 'error',
+            error: `claude CLI の起動に失敗: ${err.message}。Claude Code がパスに入っているか確認してください。`,
+        });
+        claudeProc = null;
+    });
+
+    claudeProc.on('exit', (code) => {
+        log('claude exited', code);
+        claudeProc = null;
+        broadcast({ type: 'disconnected' });
+    });
+
+    broadcast({ type: 'ready', model: MODEL, streaming: true });
+}
+
+function sendToClaudeStream(userText) {
+    startClaudeStream();
+    const line = JSON.stringify({
+        type: 'user',
+        message: { role: 'user', content: userText },
+    });
+    if (claudeProc && claudeProc.stdin.writable) {
+        claudeProc.stdin.write(line + '\n');
+        broadcast({ type: 'working' });
+    } else {
+        broadcast({ type: 'error', error: 'claude プロセスが利用不可' });
+    }
+}
+
+function restartClaudeStream() {
+    if (claudeProc) {
+        claudeProc.kill();
+        claudeProc = null;
+    }
+    claudeStdoutBuf = '';
+    startClaudeStream();
+}
+
+function handleClaudeStreamMessage(obj) {
+    // Handle stream-json output from claude
+    // Types: thinking, assistant, tool_use, tool_result, result, etc.
+
+    if (obj.type === 'assistant' && obj.message?.content) {
+        // Extract text blocks from message content
+        const textParts = [];
+        for (const block of obj.message.content) {
+            if (block.type === 'text' && block.text) {
+                textParts.push(block.text);
+            }
+        }
+        if (textParts.length > 0) {
+            broadcast({ type: 'assistant', text: textParts.join('\n') });
+        }
+    } else if (obj.type === 'result') {
+        // Turn complete
+        broadcast({ type: 'result', done: true });
+    } else if (obj.type === 'tool_use') {
+        // MCP tool call — claude handles this via stdio with mcp-server,
+        // no need to forward here
+    }
 }
 
 // ---------- Start (with port fallback) ----------

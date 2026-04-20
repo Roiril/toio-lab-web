@@ -151,20 +151,23 @@ document.addEventListener("DOMContentLoaded", () => {
             onMessage: (msg) => {
                 switch (msg.type) {
                     case 'ready':
-                        console.log('[ClaudeChat] ready, model:', msg.model, 'session:', msg.sessionId);
+                        console.log('[ClaudeChat] ready, model:', msg.model, 'streaming:', msg.streaming);
                         break;
                     case 'working':
-                        // 送信直後に UI の処理中表示は submitChat 側で出しているので何もしない
+                        // Already showing "processing" from submitChat
                         break;
                     case 'assistant': {
                         const meta = [];
-                        if (msg.duration_ms) meta.push(`${Math.round(msg.duration_ms)}ms`);
-                        if (msg.cost_usd) meta.push(`$${msg.cost_usd.toFixed(4)}`);
+                        if (msg.latency_ms) meta.push(`${Math.round(msg.latency_ms)}ms`);
                         const suffix = meta.length ? `\n\n_(${meta.join(' · ')})_` : '';
                         addMessage('ai', (msg.text || '(空のレスポンス)') + suffix);
-                        setChatProcessingState(false);
+                        // Don't close state yet — wait for 'result'
                         break;
                     }
+                    case 'result':
+                        // Turn complete
+                        setChatProcessingState(false);
+                        break;
                     case 'error':
                         addMessage('system', `エラー: ${msg.error}`);
                         setChatProcessingState(false);
@@ -172,11 +175,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     case 'reset-ack':
                         addMessage('system', 'Claudeセッションをリセットしました。');
                         break;
+                    case 'disconnected':
+                        // claude プロセスが落ちた — 次メッセージで再起動される
+                        console.log('[ClaudeChat] claude process disconnected');
+                        break;
                 }
             },
             onStatus: ({ state }) => {
                 if (state === 'open') {
-                    addMessage('system', 'Claude Code バックエンド接続 (Haiku)。');
+                    addMessage('system', 'Claude Code バックエンド接続 (Haiku, streaming mode)。');
                 } else if (state === 'closed') {
                     addMessage('system', 'Claude Code バックエンド切断。再接続を試行中...');
                 }

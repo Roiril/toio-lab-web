@@ -15,6 +15,7 @@ class ClaudeChatClient {
         this.onStatus = onStatus || (() => {});
         this.reconnectTimer = null;
         this.isClosed = false;
+        this.lastSendTime = null;  // for latency measurement
     }
 
     connect() {
@@ -53,6 +54,17 @@ class ClaudeChatClient {
             let msg;
             try { msg = JSON.parse(event.data); }
             catch (e) { console.warn('[ClaudeChat] bad message:', event.data); return; }
+
+            // Attach latency info to assistant messages
+            if (msg.type === 'assistant' && this.lastSendTime) {
+                const elapsed = Date.now() - this.lastSendTime;
+                msg.latency_ms = elapsed;
+            }
+            // Clear lastSendTime on result
+            if (msg.type === 'result') {
+                this.lastSendTime = null;
+            }
+
             this.onMessage(msg);
         });
 
@@ -81,6 +93,7 @@ class ClaudeChatClient {
 
     send(text) {
         if (!this.isReady()) return false;
+        this.lastSendTime = Date.now();
         this.ws.send(JSON.stringify({ type: 'user', text }));
         return true;
     }
