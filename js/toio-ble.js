@@ -36,7 +36,16 @@ class ToioBLE {
         this._pendingMove = null;
         this._controlId = 0;
         this._shouldReconnect = false;
-        this._writeQueue = Promise.resolve(); // serializes BLE writes to avoid GATT race conditions
+        this._writeQueue = Promise.resolve();
+        this._lastPositionUpdateTime = 0;
+        this._positionUpdateThrottleMs = 50;
+
+        // Position noise filtering (deadband)
+        this._lastReportedX = 0;
+        this._lastReportedY = 0;
+        this._lastReportedAngle = 0;
+        this._positionDeadbandMm = 3;
+        this._angleDeadbandDeg = 2;
 
         // Bound handlers — stored so addEventListener/removeEventListener are symmetric
         this._boundHandleIdUpdate = this._handleIdUpdate.bind(this);
@@ -67,6 +76,51 @@ class ToioBLE {
         // Keep queue alive even when a write fails
         this._writeQueue = queued.then(() => {}, () => {});
         return queued;
+    }
+
+    /**
+     * Wait for motion to complete by detecting position stability.
+     * Monitors position updates until coordinates stop changing for 100ms.
+     */
+    async _waitForMotionComplete(maxWaitMs = 3000) {
+        return new Promise(resolve => {
+            const startTime = performance.now();
+            let lastX = this.x;
+            let lastY = this.y;
+            let lastAngle = this.angle;
+            let stableMs = 0;
+            const requiredStableMs = 100;
+
+            const checkStability = () => {
+                const elapsed = performance.now() - startTime;
+
+                if (this.x === lastX && this.y === lastY && this.angle === lastAngle) {
+                    stableMs += 50;
+                } else {
+                    stableMs = 0;
+                }
+
+                if (stableMs >= requiredStableMs) {
+                    console.log(`[toio] Motion complete (stable for ${requiredStableMs}ms)`);
+                    resolve();
+                    return;
+                }
+
+                if (elapsed > maxWaitMs) {
+                    console.warn(`[toio] Motion wait timeout after ${maxWaitMs}ms`);
+                    resolve();
+                    return;
+                }
+
+                lastX = this.x;
+                lastY = this.y;
+                lastAngle = this.angle;
+
+                setTimeout(checkStability, 50);
+            };
+
+            checkStability();
+        });
     }
 
     async connect() {
@@ -219,20 +273,48 @@ class ToioBLE {
             this._pendingMove = null;
         }
         this.isMoving = false;
+
+        // Reset deadband tracking
+        this._lastReportedX = 0;
+        this._lastReportedY = 0;
+        this._lastReportedAngle = 0;
     }
 
     // --- Private Handlers ---
 
     _handleIdUpdate(event) {
         try {
+            const now = performance.now();
+            if (now - this._lastPositionUpdateTime < this._positionUpdateThrottleMs) {
+                return;
+            }
+
             const dv = event.target.value;
             const type = dv.getUint8(0);
-            if (type === 0x01) { // Position ID
-                this.x = dv.getUint16(1, true);
-                this.y = dv.getUint16(3, true);
-                this.angle = dv.getUint16(5, true);
-                if (this.onIdUpdateCallback) {
-                    this.onIdUpdateCallback({ x: this.x, y: this.y, angle: this.angle });
+            if (type === 0x01) {
+                const newX = dv.getUint16(1, true);
+                const newY = dv.getUint16(3, true);
+                const newAngle = dv.getUint16(5, true);
+
+                // Deadband filter: only update if change exceeds threshold
+                const dx = Math.abs(newX - this._lastReportedX);
+                const dy = Math.abs(newY - this._lastReportedY);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                const angleDiff = Math.abs(newAngle - this._lastReportedAngle);
+                const angleDiffClamped = Math.min(angleDiff, 360 - angleDiff);
+
+                if (distance >= this._positionDeadbandMm || angleDiffClamped >= this._angleDeadbandDeg) {
+                    this.x = newX;
+                    this.y = newY;
+                    this.angle = newAngle;
+                    this._lastReportedX = newX;
+                    this._lastReportedY = newY;
+                    this._lastReportedAngle = newAngle;
+                    this._lastPositionUpdateTime = now;
+
+                    if (this.onIdUpdateCallback) {
+                        this.onIdUpdateCallback({ x: this.x, y: this.y, angle: this.angle });
+                    }
                 }
             }
         } catch (e) {
@@ -305,18 +387,24 @@ class ToioBLE {
         const lSpd = Math.min(255, Math.abs(leftSpeed));
         const rSpd = Math.min(255, Math.abs(rightSpeed));
 
-        if (durationMs > 0) {
-            let dur = Math.floor(durationMs / 10);
-            if (dur > 255) dur = 255;
-            const buf = new Uint8Array([0x02, 0x01, leftDir, lSpd, 0x02, rightDir, rSpd, dur]);
-            await this._enqueueWrite(() => this.characteristics.motor.writeValueWithoutResponse(buf));
-            return new Promise(resolve => {
-                setTimeout(() => { this.isMoving = false; resolve(); }, durationMs + 50);
-            });
-        } else {
-            const buf = new Uint8Array([0x01, 0x01, leftDir, lSpd, 0x02, rightDir, rSpd]);
-            await this._enqueueWrite(() => this.characteristics.motor.writeValueWithoutResponse(buf));
-        }
+        return new Promise((resolve) => {
+            const sendFn = () => {
+                if (durationMs > 0) {
+                    let dur = Math.floor(durationMs / 10);
+                    if (dur > 255) dur = 255;
+                    const buf = new Uint8Array([0x02, 0x01, leftDir, lSpd, 0x02, rightDir, rSpd, dur]);
+                    return this.characteristics.motor.writeValueWithoutResponse(buf).then(() => {
+                        setTimeout(() => { this.isMoving = false; resolve(); }, durationMs + 50);
+                    });
+                } else {
+                    const buf = new Uint8Array([0x01, 0x01, leftDir, lSpd, 0x02, rightDir, rSpd]);
+                    return this.characteristics.motor.writeValueWithoutResponse(buf).then(() => {
+                        resolve();
+                    });
+                }
+            };
+            this._enqueueWrite(sendFn).catch(() => resolve());
+        });
     }
 
     async stop() {
@@ -330,13 +418,13 @@ class ToioBLE {
     }
 
     /**
-     * Move to target coordinate
+     * Move to target coordinate with retry logic
      * @param {number} x Mat coordinate X
      * @param {number} y Mat coordinate Y
      * @param {number} angle Angle 0-360
      * @returns {Promise<{result: number, resultStr: string}>}
      */
-    async _sendMoveToTarget(x, y, angle) {
+    async _sendMoveToTarget(x, y, angle, retries = 2) {
         if (this._pendingMove) {
             if (this._pendingMove._timeoutId) clearTimeout(this._pendingMove._timeoutId);
             this._pendingMove.resolve({ result: 0x04, resultStr: "Interrupted by new command" });
@@ -359,38 +447,47 @@ class ToioBLE {
         dv.setUint16(11, ((angle % 360) + 360) % 360, true);
 
         return new Promise((resolve) => {
-            const timeoutId = setTimeout(() => {
-                if (this._pendingMove && this._pendingMove.controlId === controlId) {
-                    console.warn(`[toio] MoveTo (ID:${controlId}) timed out after 15s`);
-                    this._pendingMove = null;
-                    this.isMoving = false;
-                    resolve({ result: 0x01, resultStr: "Timeout" });
-                }
-            }, 15000);
-
-            this._pendingMove = {
-                controlId,
-                _timeoutId: timeoutId,
-                resolve: (res) => {
-                    clearTimeout(timeoutId);
-                    this.isMoving = false;
-                    resolve(res);
-                }
-            };
-
-            this._enqueueWrite(() => this.characteristics.motor.writeValueWithoutResponse(buf))
-                .then(() => {
-                    this.isMoving = true;
-                    console.log(`[toio] Sent moveTo(ID:${controlId}) to (${x}, ${y}) angle ${angle}`);
-                })
-                .catch(err => {
-                    clearTimeout(timeoutId);
+            const attemptSend = (attempt) => {
+                const timeoutId = setTimeout(() => {
                     if (this._pendingMove && this._pendingMove.controlId === controlId) {
                         this._pendingMove = null;
+                        this.isMoving = false;
+                        if (attempt < retries) {
+                            console.warn(`[toio] MoveTo (ID:${controlId}) timeout, retrying (${attempt + 1}/${retries})...`);
+                            attemptSend(attempt + 1);
+                        } else {
+                            console.warn(`[toio] MoveTo (ID:${controlId}) timed out after ${retries} retries`);
+                            resolve({ result: 0x01, resultStr: "Timeout" });
+                        }
                     }
-                    this.isMoving = false;
-                    resolve({ result: 0xFF, resultStr: err.message });
-                });
+                }, 10000);
+
+                this._pendingMove = {
+                    controlId,
+                    _timeoutId: timeoutId,
+                    resolve: (res) => {
+                        clearTimeout(timeoutId);
+                        this.isMoving = false;
+                        resolve(res);
+                    }
+                };
+
+                this._enqueueWrite(() => this.characteristics.motor.writeValueWithoutResponse(buf))
+                    .then(() => {
+                        this.isMoving = true;
+                        console.log(`[toio] Sent moveTo(ID:${controlId}) to (${x}, ${y}) angle ${angle}`);
+                    })
+                    .catch(err => {
+                        clearTimeout(timeoutId);
+                        if (this._pendingMove && this._pendingMove.controlId === controlId) {
+                            this._pendingMove = null;
+                        }
+                        this.isMoving = false;
+                        resolve({ result: 0xFF, resultStr: err.message });
+                    });
+            };
+
+            attemptSend(0);
         });
     }
 
@@ -413,10 +510,14 @@ class ToioBLE {
             // Step 1: Rotate in place to face target
             const r1 = await this._sendMoveToTarget(this.x, this.y, bearing);
             if (r1.result === 0x04) return r1;
+            if (r1.result !== 0x00) return r1;
+            await this._waitForMotionComplete();
 
             // Step 2: Move straight to target (already facing the right direction, no rotation)
             const r2 = await this._sendMoveToTarget(x, y, bearing);
             if (r2.result === 0x04) return r2;
+            if (r2.result !== 0x00) return r2;
+            await this._waitForMotionComplete();
         }
 
         // Step 3: Rotate in place to final angle
@@ -434,91 +535,148 @@ class ToioBLE {
      */
     async setLight(r, g, b, durationMs = 0) {
         if (!this.isConnected) return;
-        let dur = durationMs > 0 ? Math.max(1, Math.floor(durationMs / 10)) : 0;
-        if (dur > 255) dur = 255;
-        const buf = new Uint8Array([0x03, dur, 0x01, 0x01, r, g, b]);
-        await this._enqueueWrite(() => this.characteristics.light.writeValueWithoutResponse(buf));
-        if (durationMs > 0) {
-            return new Promise(resolve => setTimeout(resolve, durationMs));
-        }
+
+        return new Promise((resolve) => {
+            const sendFn = () => {
+                let dur = durationMs > 0 ? Math.max(1, Math.floor(durationMs / 10)) : 0;
+                if (dur > 255) dur = 255;
+                const buf = new Uint8Array([0x03, dur, 0x01, 0x01, r, g, b]);
+                return this.characteristics.light.writeValueWithoutResponse(buf).then(() => {
+                    if (durationMs > 0) {
+                        setTimeout(resolve, durationMs);
+                    } else {
+                        resolve();
+                    }
+                });
+            };
+            this._enqueueWrite(sendFn).catch(() => resolve());
+        });
     }
 
     async setLightPattern(frames, repetitions = 1) {
         if (!this.isConnected || !frames || frames.length === 0) return;
 
+        const BLE_MAX_FRAMES = 8;
         let reps = Math.min(255, repetitions);
-        // BLE ATT MTU default = 23 bytes → payload 20 bytes max.
-        // Header: 3 bytes, per frame: 6 bytes → max 2 frames (15 bytes) to stay under 20.
-        const BLE_MAX_FRAMES = 2;
-        let numFrames = Math.min(BLE_MAX_FRAMES, frames.length);
-
-        let buf = new Uint8Array(3 + numFrames * 6);
-        buf[0] = 0x04; // Continuous turn on
-        buf[1] = reps;
-        buf[2] = numFrames;
-        
+        let frameIdx = 0;
         let totalDurationMs = 0;
-        for (let i = 0; i < numFrames; i++) {
-            const f = frames[i];
-            let durMs = f.duration_ms || 100;
-            let dur10ms = Math.max(1, Math.min(255, Math.floor(durMs / 10)));
-            totalDurationMs += durMs;
-            
-            let offset = 3 + i * 6;
-            buf[offset] = dur10ms;
-            buf[offset+1] = 0x01; // Light count (always 1 for toio)
-            buf[offset+2] = 0x01; // Light ID
-            buf[offset+3] = f.red || 0;
-            buf[offset+4] = f.green || 0;
-            buf[offset+5] = f.blue || 0;
-        }
-        
-        await this._enqueueWrite(() => this.characteristics.light.writeValueWithoutResponse(buf));
-        
-        if (reps > 0) {
-            return new Promise(resolve => setTimeout(resolve, totalDurationMs * reps));
-        }
+
+        return new Promise((resolve) => {
+            const sendNextBatch = () => {
+                if (frameIdx >= frames.length) {
+                    if (reps > 0) {
+                        const singleDur = frames.reduce((sum, f) => sum + (f.duration_ms || 100), 0);
+                        setTimeout(resolve, singleDur * reps);
+                    } else {
+                        resolve();
+                    }
+                    return Promise.resolve();
+                }
+
+                const batchSize = Math.min(BLE_MAX_FRAMES, frames.length - frameIdx);
+                let buf = new Uint8Array(3 + batchSize * 6);
+                buf[0] = 0x04;
+                buf[1] = reps;
+                buf[2] = batchSize;
+
+                for (let i = 0; i < batchSize; i++) {
+                    const f = frames[frameIdx + i];
+                    let durMs = f.duration_ms || 100;
+                    let dur10ms = Math.max(1, Math.min(255, Math.floor(durMs / 10)));
+                    totalDurationMs += durMs;
+
+                    let offset = 3 + i * 6;
+                    buf[offset] = dur10ms;
+                    buf[offset+1] = 0x01;
+                    buf[offset+2] = 0x01;
+                    buf[offset+3] = f.red || 0;
+                    buf[offset+4] = f.green || 0;
+                    buf[offset+5] = f.blue || 0;
+                }
+
+                frameIdx += batchSize;
+                return this.characteristics.light.writeValueWithoutResponse(buf);
+            };
+
+            this._enqueueWrite(() => {
+                const recursiveSend = () => {
+                    return sendNextBatch().then(() => {
+                        if (frameIdx < frames.length) {
+                            return recursiveSend();
+                        }
+                    });
+                };
+                return recursiveSend();
+            }).catch(() => resolve());
+        });
     }
 
     // --- Sound Control ---
 
     async playSound(noteId = 60, durationMs = 500) {
         if (!this.isConnected) return;
-        let dur = durationMs > 0 ? Math.floor(durationMs / 10) : 0;
-        if (dur > 255) dur = 255;
-        const buf = new Uint8Array([0x03, 0x01, 0x01, dur, noteId, 0xff]);
-        await this._enqueueWrite(() => this.characteristics.sound.writeValueWithoutResponse(buf));
-        return new Promise(resolve => setTimeout(resolve, durationMs));
+
+        return new Promise((resolve) => {
+            const sendFn = () => {
+                let dur = durationMs > 0 ? Math.floor(durationMs / 10) : 0;
+                if (dur > 255) dur = 255;
+                const buf = new Uint8Array([0x03, 0x01, 0x01, dur, noteId, 0xff]);
+                return this.characteristics.sound.writeValueWithoutResponse(buf).then(() => {
+                    setTimeout(resolve, durationMs);
+                });
+            };
+            this._enqueueWrite(sendFn).catch(() => resolve());
+        });
     }
 
     async playMelody(notes) {
         if (!this.isConnected || !notes || notes.length === 0) return;
 
-        // BLE ATT MTU default = 23 bytes → payload 20 bytes max.
-        // Header: 3 bytes, per note: 3 bytes → max 5 notes (15 bytes) to stay under 20.
-        const BLE_MAX_NOTES = 5;
-        let numNotes = Math.min(BLE_MAX_NOTES, notes.length);
-        let buf = new Uint8Array(3 + numNotes * 3);
-        
-        buf[0] = 0x03; // MIDI Note sequence
-        buf[1] = 0x01; // Repeat count
-        buf[2] = numNotes; // Operation count
-        
+        const BLE_MAX_NOTES = 16;
+        let noteIdx = 0;
         let totalDurationMs = 0;
-        for (let i = 0; i < numNotes; i++) {
-            const n = notes[i];
-            let durMs = n.duration_ms || 300;
-            let dur10ms = Math.max(1, Math.min(255, Math.floor(durMs / 10)));
-            totalDurationMs += durMs;
-            
-            let offset = 3 + i * 3;
-            buf[offset]   = dur10ms;
-            buf[offset+1] = n.note || 60; // Note ID
-            buf[offset+2] = 0xff;         // Volume
-        }
-        
-        await this._enqueueWrite(() => this.characteristics.sound.writeValueWithoutResponse(buf));
-        return new Promise(resolve => setTimeout(resolve, totalDurationMs));
+
+        return new Promise((resolve) => {
+            const sendNextBatch = () => {
+                if (noteIdx >= notes.length) {
+                    setTimeout(resolve, totalDurationMs);
+                    return Promise.resolve();
+                }
+
+                const batchSize = Math.min(BLE_MAX_NOTES, notes.length - noteIdx);
+                let buf = new Uint8Array(3 + batchSize * 3);
+
+                buf[0] = 0x03;
+                buf[1] = 0x01;
+                buf[2] = batchSize;
+
+                for (let i = 0; i < batchSize; i++) {
+                    const n = notes[noteIdx + i];
+                    let durMs = n.duration_ms || 300;
+                    let dur10ms = Math.max(1, Math.min(255, Math.floor(durMs / 10)));
+                    totalDurationMs += durMs;
+
+                    let offset = 3 + i * 3;
+                    buf[offset] = dur10ms;
+                    buf[offset+1] = n.note || 60;
+                    buf[offset+2] = 0xff;
+                }
+
+                noteIdx += batchSize;
+                return this.characteristics.sound.writeValueWithoutResponse(buf);
+            };
+
+            this._enqueueWrite(() => {
+                const recursiveSend = () => {
+                    return sendNextBatch().then(() => {
+                        if (noteIdx < notes.length) {
+                            return recursiveSend();
+                        }
+                    });
+                };
+                return recursiveSend();
+            }).catch(() => resolve());
+        });
     }
 
     // --- Info ---

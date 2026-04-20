@@ -14,8 +14,10 @@ class McpBridge {
         this.url = `ws://localhost:${port}`;
         this.ws = null;
         this.reconnectTimer = null;
+        this.reconnectAttempt = 0;
         this.onStatus = onStatus || (() => {});
         this.isClosed = false;
+        this.hasEverConnected = false;
     }
 
     connect() {
@@ -49,6 +51,8 @@ class McpBridge {
 
         this.ws.addEventListener("open", () => {
             console.log(`[McpBridge] connected to ${this.url}`);
+            this.hasEverConnected = true;
+            this.reconnectAttempt = 0;
             this.onStatus({ state: "open" });
         });
 
@@ -65,7 +69,12 @@ class McpBridge {
         this.ws.addEventListener("close", () => {
             console.log("[McpBridge] disconnected");
             this.ws = null;
-            this.onStatus({ state: "disconnected" });
+            // Only surface "disconnected" once we've been connected at least once —
+            // otherwise initial probe failures (before claude spawns the MCP server)
+            // spam the chat with "切断" messages.
+            if (this.hasEverConnected) {
+                this.onStatus({ state: "disconnected" });
+            }
             if (!this.isClosed) this._scheduleReconnect();
         });
 
@@ -76,10 +85,14 @@ class McpBridge {
 
     _scheduleReconnect() {
         if (this.isClosed || this.reconnectTimer) return;
+
+        this.reconnectAttempt++;
+        const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempt - 1), 4000);
+
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
             this._openSocket();
-        }, 2000);
+        }, delay);
     }
 
     async _handleCall(msg) {

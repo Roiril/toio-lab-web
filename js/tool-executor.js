@@ -93,8 +93,10 @@ class ToolExecutor {
 
                 case "play_melody": {
                     if (this.toio.playMelody) {
+                        const totalDuration = args.notes ? args.notes.reduce((sum, n) => sum + (n.duration_ms || 300), 0) : 0;
+                        console.log(`[ToolExecutor] play_melody: ${args.notes?.length || 0} notes, total duration ${totalDuration}ms`);
                         await this._retryOnce(() => this.toio.playMelody(args.notes), "play_melody");
-                        resultData = { status: "success", desc: `Played melody with ${args.notes.length} notes` };
+                        resultData = { status: "success", desc: `Played melody with ${args.notes.length} notes (${totalDuration}ms total)` };
                     } else {
                         resultData = { status: "error", error: "play_melody not supported by current interface" };
                     }

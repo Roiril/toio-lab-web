@@ -29,6 +29,7 @@ const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT) || 3000;
 const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const MAX_PORT = PORT + 100;
+const LOG_FILE = path.join(ROOT, 'dev-server.log');
 
 const MIME = {
     '.html': 'text/html; charset=utf-8',
@@ -125,9 +126,43 @@ function broadcast(msg) {
 function startClaudeStream() {
     if (claudeProc) return; // already running
 
+    const toioSystemPrompt = `You are controlling a toio cube robot via MCP tools.
+
+## toio Mat Coordinate System
+- Mat dimensions: 410×410 mm
+- Coordinate origin (0,0): top-left corner
+- X-axis: points right (0→410)
+- Y-axis: points down (0→410)
+- Angle: 0°=facing right, 90°=facing down, 180°=facing left, 270°=facing up
+
+## Available Tools
+Use these tools to control the toio cube:
+- \`move_to(x, y, angle)\`: Move to absolute coordinate and face direction
+- \`move_path(waypoints)\`: Move along multiple waypoints sequentially
+- \`spin(direction, duration_ms, speed)\`: Spin in place (cw/ccw, 500-2500ms, 0-100)
+- \`set_light(r, g, b, duration_ms)\`: Set LED color (0-255 each, 0=infinite)
+- \`set_light_pattern(frames, repetitions)\`: Animated light pattern
+- \`play_sound(note_id, duration_ms)\`: Play beep (60=C4, 62=D4, etc)
+- \`play_melody(notes)\`: Play sequence of notes
+- \`get_position()\`: Get current position {x, y, angle, margins}
+- \`get_battery()\`: Get battery 0-100%
+- \`stop()\`: Emergency stop
+- \`wait(duration_ms)\`: Pause
+- \`think(thought)\`: Plan your approach
+
+## Tips
+- Always use \`get_position()\` before complex moves to verify current state
+- Check \`get_battery()\` periodically
+- The \`move_to\` with warning field means target unreachable—retry or adjust
+- For smooth movement, break paths into waypoints
+- Margins from \`get_position()\` tell you how close you are to edges`;
+
     const args = [
+        '-p',
         '--input-format', 'stream-json',
         '--output-format', 'stream-json',
+        '--verbose',
+        '--append-system-prompt', toioSystemPrompt,
         '--model', MODEL,
         '--dangerously-skip-permissions',
     ];
@@ -147,17 +182,18 @@ function startClaudeStream() {
             if (!line.trim()) continue;
             try {
                 const obj = JSON.parse(line);
+                log('[claude output]', JSON.stringify(obj).slice(0, 200));
                 handleClaudeStreamMessage(obj);
             } catch (e) {
-                warn('parse error:', line.slice(0, 100));
+                warn('parse error on line:', line.slice(0, 150));
             }
         }
     });
 
     claudeProc.stderr.on('data', (d) => {
-        const msg = d.toString();
-        if (msg.includes('error') || msg.includes('Error')) {
-            warn('claude stderr:', msg.slice(0, 200));
+        const msg = d.toString().trim();
+        if (msg) {
+            warn('claude stderr:', msg.slice(0, 500));
         }
     });
 
@@ -186,10 +222,16 @@ function sendToClaudeStream(userText) {
         message: { role: 'user', content: userText },
     });
     if (claudeProc && claudeProc.stdin.writable) {
-        claudeProc.stdin.write(line + '\n');
+        claudeProc.stdin.write(line + '\n', (err) => {
+            if (err) {
+                warn('stdin write error:', err.message);
+                broadcast({ type: 'error', error: `claude への入力失敗: ${err.message}` });
+            }
+        });
         broadcast({ type: 'working' });
     } else {
-        broadcast({ type: 'error', error: 'claude プロセスが利用不可' });
+        warn('claude process not available for writing');
+        broadcast({ type: 'error', error: 'claude プロセスが起動していません。`npm run dev` を確認してください。' });
     }
 }
 
@@ -203,11 +245,11 @@ function restartClaudeStream() {
 }
 
 function handleClaudeStreamMessage(obj) {
-    // Handle stream-json output from claude
-    // Types: thinking, assistant, tool_use, tool_result, result, etc.
-
+    // stream-json event types we care about: "assistant" (text blocks — tool_use
+    // blocks inside content are handled by claude↔mcp-server directly) and
+    // "result" (turn complete). Other types (system init, user tool_result
+    // echoes, etc.) are ignored.
     if (obj.type === 'assistant' && obj.message?.content) {
-        // Extract text blocks from message content
         const textParts = [];
         for (const block of obj.message.content) {
             if (block.type === 'text' && block.text) {
@@ -218,11 +260,7 @@ function handleClaudeStreamMessage(obj) {
             broadcast({ type: 'assistant', text: textParts.join('\n') });
         }
     } else if (obj.type === 'result') {
-        // Turn complete
         broadcast({ type: 'result', done: true });
-    } else if (obj.type === 'tool_use') {
-        // MCP tool call — claude handles this via stdio with mcp-server,
-        // no need to forward here
     }
 }
 
@@ -231,6 +269,18 @@ function tryListen(attemptPort) {
     if (attemptPort > MAX_PORT) {
         console.error(`[dev-server] Could not find an open port between ${PORT} and ${MAX_PORT}`);
         process.exit(1);
+    }
+
+    // One-time cleanup of zombie MCP server processes at startup (Windows only)
+    if (process.platform === 'win32') {
+        try {
+            require('child_process').execSync(
+                'powershell -Command "Get-Process -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq \'node\' -and $_.CommandLine -like \'*mcp-server*\'} | Stop-Process -Force 2>/dev/null" || true',
+                { stdio: 'ignore' }
+            );
+        } catch (e) {
+            // Ignore cleanup errors
+        }
     }
 
     const { httpServer, wss } = createServers();
@@ -251,8 +301,21 @@ function tryListen(attemptPort) {
     });
 
     // Graceful shutdown
-    process.on('SIGINT', () => { log('shutting down'); process.exit(0); });
-    process.on('SIGTERM', () => { process.exit(0); });
+    const cleanup = () => {
+        log('shutting down and killing claude process...');
+        if (claudeProc && !claudeProc.killed) {
+            claudeProc.kill('SIGTERM');
+            // Force kill after timeout if graceful shutdown didn't work
+            setTimeout(() => {
+                if (claudeProc && !claudeProc.killed) {
+                    claudeProc.kill('SIGKILL');
+                }
+            }, 2000);
+        }
+    };
+    process.on('SIGINT', () => { cleanup(); process.exit(0); });
+    process.on('SIGTERM', () => { cleanup(); process.exit(0); });
+    process.on('exit', cleanup);
 }
 
 tryListen(PORT);

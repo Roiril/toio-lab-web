@@ -23,7 +23,7 @@ const require = createRequire(import.meta.url);
 const { toioTools } = require("../js/tools-schema.js");
 
 const WS_PORT = Number(process.env.TOIO_WS_PORT || 7777);
-const BRIDGE_TIMEOUT_MS = Number(process.env.TOIO_BRIDGE_TIMEOUT_MS || 30000);
+const BRIDGE_TIMEOUT_MS = Number(process.env.TOIO_BRIDGE_TIMEOUT_MS || 60000);
 
 // ---------- Convert OpenAI tool schema to MCP tool schema ----------
 const mcpTools = toioTools.map(t => ({

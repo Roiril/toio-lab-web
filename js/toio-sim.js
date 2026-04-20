@@ -60,6 +60,49 @@ class ToioSim {
         return this.move(s, -s, durationMs);
     }
 
+    /**
+     * Wait for motion to complete by detecting position stability.
+     * Monitors position updates until coordinates stop changing for 100ms.
+     */
+    async _waitForMotionComplete(maxWaitMs = 3000) {
+        return new Promise(resolve => {
+            const startTime = performance.now();
+            let lastX = this.x;
+            let lastY = this.y;
+            let lastAngle = this.angle;
+            let stableMs = 0;
+            const requiredStableMs = 100;
+
+            const checkStability = () => {
+                const elapsed = performance.now() - startTime;
+
+                if (this.x === lastX && this.y === lastY && this.angle === lastAngle) {
+                    stableMs += 50;
+                } else {
+                    stableMs = 0;
+                }
+
+                if (stableMs >= requiredStableMs) {
+                    resolve();
+                    return;
+                }
+
+                if (elapsed > maxWaitMs) {
+                    resolve();
+                    return;
+                }
+
+                lastX = this.x;
+                lastY = this.y;
+                lastAngle = this.angle;
+
+                setTimeout(checkStability, 50);
+            };
+
+            checkStability();
+        });
+    }
+
     async moveTo(matX, matY, angle = 0) {
         const dx = matX - this.x;
         const dy = matY - this.y;
@@ -71,10 +114,10 @@ class ToioSim {
             // Step 1: Rotate to face target
             this.angle = bearing;
             this._render();
-            await new Promise(resolve => setTimeout(resolve, 300));
+            await this._waitForMotionComplete();
 
-            // Step 2: Move straight to target
-            const moveMs = Math.max(500, (distance / 100) * 1000);
+            // Step 2: Move straight to target (realistic timing: ~50mm/sec at speed 50)
+            const moveMs = Math.max(800, (distance / 25) * 1000);
             await new Promise(resolve => {
                 setTimeout(() => {
                     this.x = matX;
@@ -83,11 +126,13 @@ class ToioSim {
                     resolve();
                 }, moveMs);
             });
+            await this._waitForMotionComplete();
         }
 
         // Step 3: Rotate to final angle
         this.angle = angle;
         this._render();
+        await this._waitForMotionComplete();
         return { result: 0x00, resultStr: "Success" };
     }
 
@@ -208,8 +253,8 @@ class ToioSim {
         this.lastTime = time;
 
         if (this.isMoving) {
-            const linearScale = 2.0; 
-            const angularScale = 0.5;
+            const linearScale = 0.5;
+            const angularScale = 0.125;
 
             const vL = this.leftSpeed * linearScale;
             const vR = this.rightSpeed * linearScale;

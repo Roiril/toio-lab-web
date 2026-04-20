@@ -103,7 +103,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const cameraClient = new CameraClient(savedCameraUrl);
 
     // UI state
-    let isAgentRunning = false;
     let isProcessingChat = false;
     let pendingCameraCapture = null; // base64 string to attach to next LLM message
     let currentThinkingNode = null;
@@ -147,11 +146,18 @@ document.addEventListener("DOMContentLoaded", () => {
     // ブラウザのチャット入力を dev-server の /claude WS に中継し、claude CLI へ渡す。
     let claudeChat = null;
     if (savedProvider === 'claude-code') {
+        let claudeBackendAnnounced = false;
         claudeChat = new ClaudeChatClient({
             onMessage: (msg) => {
                 switch (msg.type) {
                     case 'ready':
-                        console.log('[ClaudeChat] ready, model:', msg.model, 'streaming:', msg.streaming);
+                        // Announce the backend once, using the real model name
+                        // the server reports rather than a hardcoded label.
+                        if (!claudeBackendAnnounced) {
+                            const modelLabel = msg.model || 'claude';
+                            addMessage('system', `Claude Code バックエンド接続 (${modelLabel}, streaming mode)。`);
+                            claudeBackendAnnounced = true;
+                        }
                         break;
                     case 'working':
                         // Already showing "processing" from submitChat
@@ -174,18 +180,20 @@ document.addEventListener("DOMContentLoaded", () => {
                         break;
                     case 'reset-ack':
                         addMessage('system', 'Claudeセッションをリセットしました。');
+                        setChatProcessingState(false);
                         break;
                     case 'disconnected':
-                        // claude プロセスが落ちた — 次メッセージで再起動される
+                        // claude プロセスが落ちた — turn 中なら UI を解放しないと
+                        // 送信ボタンが復活せず詰まる。
                         console.log('[ClaudeChat] claude process disconnected');
+                        if (isProcessingChat) setChatProcessingState(false);
                         break;
                 }
             },
             onStatus: ({ state }) => {
-                if (state === 'open') {
-                    addMessage('system', 'Claude Code バックエンド接続 (Haiku, streaming mode)。');
-                } else if (state === 'closed') {
+                if (state === 'closed') {
                     addMessage('system', 'Claude Code バックエンド切断。再接続を試行中...');
+                    if (isProcessingChat) setChatProcessingState(false);
                 }
             }
         });
@@ -250,6 +258,12 @@ document.addEventListener("DOMContentLoaded", () => {
     cancelBtn.addEventListener('click', () => {
         if (agentLoop) {
             agentLoop.cancel();
+            cancelBtn.disabled = true;
+        } else if (claudeChat) {
+            // In claude-code mode there's no Ollama/Gemini agent loop to cancel.
+            // Reset the streaming session — dev-server kills the claude subprocess
+            // and respawns on the next message.
+            claudeChat.reset();
             cancelBtn.disabled = true;
         }
     });
@@ -448,7 +462,8 @@ document.addEventListener("DOMContentLoaded", () => {
         // --- Claude Code (MCP Bridge) mode: route through dev-server /claude WS ---
         if (claudeChat) {
             if (!claudeChat.isReady()) {
-                addMessage("system", "Claude Code バックエンドに接続できていません。`npm run dev` が実行中か確認してください。");
+                console.warn('[submitChat] claude backend not ready, state:', claudeChat.ws?.readyState);
+                addMessage("system", "Claude Code バックエンドに接続できていません。`npm run dev` が実行中か確認し、ブラウザをリロードしてください。");
                 return;
             }
             addMessage("user", text);
@@ -467,7 +482,6 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         setChatProcessingState(true);
-        isAgentRunning = true;
         addMessage("user", text);
 
         try {
@@ -475,7 +489,6 @@ document.addEventListener("DOMContentLoaded", () => {
         } catch (e) {
             addMessage("system", "エラーが発生しました: " + e.message);
         } finally {
-            isAgentRunning = false;
             setChatProcessingState(false);
             if (currentThinkingNode) {
                 currentThinkingNode.classList.remove('thinking');
