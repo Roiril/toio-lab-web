@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "toio": {
-      "command": "node",
-      "args": ["mcp-server/server.mjs"]
-    }
-  }
-}

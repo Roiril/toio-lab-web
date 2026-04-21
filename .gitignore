@@ -34,5 +34,8 @@ Thumbs.db
 
 # Project specific
 js/config.js
-.claude/
+
+# Claude Code - ローカル設定のみ除外
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
 

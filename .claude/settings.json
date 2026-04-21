@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"c:/Users/kouga/Projects/Web/toio-lab-web/scripts/post-edit-hook.js\""
+          }
+        ]
+      }
+    ]
+  }
+}
