@@ -74,7 +74,7 @@ function connectAndTest() {
 
     // Small delay to ensure ready message is processed
     setTimeout(() => {
-      const testMessage = '前に進んで';
+      const testMessage = '前に3マス進んで！';
       console.log(`[Test] Sending command: "${testMessage}"`);
       ws.send(JSON.stringify({
         type: 'user',

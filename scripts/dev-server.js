@@ -51,6 +51,46 @@ const MIME = {
 function log(...args) { console.log('[dev-server]', ...args); }
 function warn(...args) { console.warn('[dev-server]', ...args); }
 
+// Start MCP server subprocess
+function startMcpServer() {
+    if (mcpServerProc) return; // already running
+
+    const mcpServerPath = path.join(ROOT, 'mcp-server', 'server.mjs');
+    if (!fs.existsSync(mcpServerPath)) {
+        warn(`MCP server not found: ${mcpServerPath}`);
+        return;
+    }
+
+    log('starting MCP server...');
+    mcpServerProc = spawn('node', [mcpServerPath], {
+        cwd: ROOT,
+        shell: process.platform === 'win32',
+    });
+
+    mcpServerProc.stdout.on('data', (d) => {
+        const msg = d.toString().trim();
+        if (msg) log('[mcp-server]', msg.slice(0, 200));
+    });
+
+    mcpServerProc.stderr.on('data', (d) => {
+        const msg = d.toString().trim();
+        if (msg) warn('[mcp-server]', msg.slice(0, 200));
+    });
+
+    mcpServerProc.on('error', (err) => {
+        warn('MCP server spawn error:', err.message);
+        mcpServerProc = null;
+    });
+
+    mcpServerProc.on('exit', (code) => {
+        log('MCP server exited', code);
+        mcpServerProc = null;
+    });
+
+    // Give MCP server time to start before Claude tries to connect
+    return new Promise(resolve => setTimeout(resolve, 1000));
+}
+
 function loadSystemPrompt() {
     try {
         if (fs.existsSync(SYSTEM_PROMPT_FILE)) {
@@ -139,6 +179,7 @@ toioキューブを制御するツール:
 
 // ---------- State ----------
 let claudeProc = null;              // long-lived claude subprocess (streaming mode)
+let mcpServerProc = null;           // MCP server subprocess
 let claudeStdoutBuf = '';           // line buffer for claude stdout
 let wsClients = new Set();           // all connected WS clients
 let currentSessionId = crypto.randomUUID(); // persists conversation between messages
@@ -194,7 +235,7 @@ function createServers() {
             try { msg = JSON.parse(raw.toString()); } catch { return; }
 
             if (msg.type === 'user' && typeof msg.text === 'string' && msg.text.trim()) {
-                sendToClaudeStream(msg.text);
+                await sendToClaudeStream(msg.text);
             } else if (msg.type === 'reset') {
                 restartClaudeStream();
                 broadcast({ type: 'reset-ack' });
@@ -221,8 +262,13 @@ function broadcast(msg) {
     }
 }
 
-function startClaudeStream() {
+async function startClaudeStream() {
     if (claudeProc) return; // already running
+
+    // Ensure MCP server is running before spawning Claude
+    if (!mcpServerProc) {
+        await startMcpServer();
+    }
 
     const toioSystemPrompt = loadSystemPrompt();
 
@@ -269,6 +315,10 @@ function startClaudeStream() {
         const msg = d.toString().trim();
         if (msg) {
             warn('claude stderr:', msg.slice(0, 500));
+            // Also broadcast stderr to browser for debugging
+            if (msg.includes('error') || msg.includes('Error') || msg.includes('failed')) {
+                broadcast({ type: 'error', error: `Claude stderr: ${msg}` });
+            }
         }
     });
 
@@ -302,8 +352,8 @@ function startClaudeStream() {
     broadcast({ type: 'ready', model: MODEL, streaming: true });
 }
 
-function sendToClaudeStream(userText) {
-    startClaudeStream();
+async function sendToClaudeStream(userText) {
+    await startClaudeStream();
     const line = JSON.stringify({
         type: 'user',
         message: { role: 'user', content: userText },
@@ -432,6 +482,7 @@ function tryListen(attemptPort) {
         log(`🤖 Claude model: ${MODEL}`);
         log(`🔐 MCP permissions: ${MCP_AUTO_APPROVE ? 'AUTO-APPROVED (dev mode)' : 'MANUAL (production mode)'}`);
         log(`🎯 Session ID: ${currentSessionId}`);
+        log('💡 Claude will initialize MCP tools from .mcp.json');
         log('============================================');
     });
 
@@ -456,6 +507,14 @@ function tryListen(attemptPort) {
                     claudeProc.kill('SIGKILL');
                 }
             }, 2000);
+        }
+        if (mcpServerProc && !mcpServerProc.killed) {
+            mcpServerProc.kill('SIGTERM');
+            setTimeout(() => {
+                if (mcpServerProc && !mcpServerProc.killed) {
+                    mcpServerProc.kill('SIGKILL');
+                }
+            }, 1000);
         }
     };
     process.on('SIGINT', () => { cleanup(); process.exit(0); });
