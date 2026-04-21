@@ -55,13 +55,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const combinedToio = window.combinedToio = new ToioCombined(toioSim, toioBle);
 
+    // Helper to load settings from localStorage with config fallback
+    const loadSetting = (key, configKey, defaultValue = '') =>
+        localStorage.getItem(key) || window.APP_CONFIG?.[configKey] || defaultValue;
+
     // LocalStorage を優先し、未設定時のみ config.js にフォールバック
-    const savedProvider = localStorage.getItem('llm_provider') || window.APP_CONFIG?.LLM_PROVIDER || 'claude-code';
-    const savedApiKey = localStorage.getItem('gemini_api_key') || window.APP_CONFIG?.GEMINI_API_KEY || '';
-    const savedGeminiModel = localStorage.getItem('gemini_model') || window.APP_CONFIG?.GEMINI_MODEL || 'gemini-2.5-flash';
-    const savedOllamaBaseUrl = localStorage.getItem('ollama_base_url') || window.APP_CONFIG?.OLLAMA_URL || 'http://localhost:11434';
-    const savedOllamaModel = localStorage.getItem('ollama_model') || window.APP_CONFIG?.OLLAMA_MODEL || 'gemma4:e4b';
-    const savedCameraUrl = localStorage.getItem('camera_url') || '';
+    const savedProvider = loadSetting('llm_provider', 'LLM_PROVIDER', 'claude-code');
+    const savedApiKey = loadSetting('gemini_api_key', 'GEMINI_API_KEY', '');
+    const savedGeminiModel = loadSetting('gemini_model', 'GEMINI_MODEL', 'gemini-2.5-flash');
+    const savedOllamaBaseUrl = loadSetting('ollama_base_url', 'OLLAMA_URL', 'http://localhost:11434');
+    const savedOllamaModel = loadSetting('ollama_model', 'OLLAMA_MODEL', 'gemma4:e4b');
+    const savedCameraUrl = loadSetting('camera_url', '', '');
 
     if (llmProviderSelect) llmProviderSelect.value = savedProvider;
     if (geminiApiKeyInput) geminiApiKeyInput.value = savedApiKey;
