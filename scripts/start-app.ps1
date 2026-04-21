@@ -1,8 +1,11 @@
 ﻿try {
     Write-Host "--- toio Lab Web [アプリ起動] ---" -ForegroundColor Cyan
 
+    # プロジェクトルートへのパス（スクリプトは scripts/ にあるため）
+    $projectRoot = Split-Path -Parent $PSScriptRoot
+
     # .env.local の読み込み
-    $envPath = Join-Path $PSScriptRoot ".env.local"
+    $envPath = Join-Path $projectRoot ".env.local"
     $llmProvider = "gemini"
     $geminiApiKey = ""
     $geminiModel = "gemini-2.5-flash"
@@ -30,7 +33,7 @@
 
     # config.js の生成
     Write-Host "`n設定ファイル (js/config.js) を生成しています..." -ForegroundColor Cyan
-    $configPath = Join-Path $PSScriptRoot "js\config.js"
+    $configPath = Join-Path $projectRoot "js\config.js"
     $configContent = @"
 // .env.local から生成されたファイルです。git管理外。
 window.APP_CONFIG = {
@@ -53,7 +56,9 @@ window.APP_CONFIG = {
         Write-Host "`nサーバーを停止するにはこのウィンドウを閉じるか Ctrl+C を押してください。" -ForegroundColor Gray
         Write-Host "--------------------------------------------------------" -ForegroundColor Gray
 
+        Push-Location $projectRoot
         npx -y serve@latest . -l 3000
+        Pop-Location
     }
 }
 catch {

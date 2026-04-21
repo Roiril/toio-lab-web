@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node scripts/gen-config.js && node scripts/dev-server.js",
     "gen-config": "node scripts/gen-config.js",
-    "test": "node test-claude-integration.js"
+    "test": "node tests/test-claude-integration.js"
   },
   "dependencies": {
     "ws": "^8.18.0"

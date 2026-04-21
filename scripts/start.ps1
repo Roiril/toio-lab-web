@@ -19,7 +19,8 @@
     if ($choice -eq '1') {
         $script = Join-Path $PSScriptRoot "start-llm.ps1"
         & "$script"
-    } elseif ($choice -eq '2') {
+    }
+    elseif ($choice -eq '2') {
         $script = Join-Path $PSScriptRoot "start-app.ps1"
         & "$script"
     } else {

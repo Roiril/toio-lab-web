@@ -1,6 +1,8 @@
 # toio Lab Web
 
-ブラウザからLLM（Ollama または Google Gemini）を呼び出し、自然言語でtoioコアキューブを操作するWebアプリです。
+**LLM × Bluetooth × Web UI でロボット操作を自然言語化するプロジェクト**
+
+ブラウザからLLM（Ollama または Google Gemini）を呼び出し、自然言語でtoioコアキューブを操作するWebアプリです。「右に少し動いて」「赤く光りながらスピンして！」などの指示をチャットで入力すると、LLMがツール呼び出しで命令を解析し、Bluetooth経由でロボットを制御します。
 
 ## 特徴
 
@@ -109,24 +111,86 @@ start-app.bat
 
 ---
 
-## システム構成
+## プロジェクト構成
 
 ```
-index.html
-js/
-├── app.js              # UI・状態管理・イベントハンドリング
-├── agent-loop.js       # エージェントループ（think→実行→評価→リトライ）
-├── tool-executor.js    # ツール実行（並列実行対応）
-├── tools-schema.js     # LLMに渡すツール定義（JSON Schema）
-├── ollama-client.js    # Ollama REST APIクライアント
-├── gemini-client.js    # Google Gemini APIクライアント
-├── toio-ble.js         # Web Bluetooth APIラッパー
-├── toio-sim.js         # ビジュアルシミュレーター
-├── toio-combined.js    # BLE + シミュレーターの統合レイヤー
-├── spatial-awareness.js# マット座標・安全範囲・移動目安の管理
-├── environment.js      # キューブ状態のスナップショット提供
-├── session-memory.js   # セッション間記憶（localStorage）
-└── config.js           # start-app.bat が自動生成（git管理外）
+toio-lab-web/
+├── index.html                          # メインHTMLファイル
+├── package.json                        # Node.js依存関係
+├── README.md                           # このファイル
+│
+├── js/                                 # フロントエンドコード
+│   ├── app.js                          # UI・状態管理・イベントハンドリング
+│   ├── agent-loop.js                   # エージェントループ（think→実行→評価→リトライ）
+│   ├── tool-executor.js                # ツール実行（並列実行対応）
+│   ├── tools-schema.js                 # LLMに渡すツール定義（JSON Schema）
+│   ├── claude-chat-client.js           # Claude Code MCP ブリッジ
+│   ├── mcp-bridge.js                   # MCP ツール実行インターフェース
+│   ├── ollama-client.js                # Ollama REST APIクライアント
+│   ├── gemini-client.js                # Google Gemini APIクライアント
+│   ├── toio-ble.js                     # Web Bluetooth APIラッパー
+│   ├── toio-sim.js                     # ビジュアルシミュレーター
+│   ├── toio-combined.js                # BLE + シミュレーターの統合レイヤー
+│   ├── spatial-awareness.js            # マット座標・安全範囲・移動目安の管理
+│   ├── environment.js                  # キューブ状態のスナップショット提供
+│   ├── session-memory.js               # セッション間記憶（localStorage）
+│   ├── camera.js                       # ESP32S3カメラ統合
+│   └── config.js                       # 自動生成（git管理外）
+│
+├── css/                                # スタイルシート
+│   └── style.css                       # UI・レイアウト・テーマ定義
+│
+├── scripts/                            # 起動・ビルドスクリプト
+│   ├── dev-server.js                   # 開発サーバー・WebSocket ホスト
+│   ├── gen-config.js                   # .env.local → config.js 生成
+│   ├── start-app.ps1                   # アプリ起動スクリプト (PowerShell)
+│   ├── start-llm.ps1                   # LLMサーバー起動スクリプト
+│   ├── start.ps1                       # メニュー形式ランチャー
+│   ├── convert_encodings.ps1           # エンコード変換ユーティリティ
+│   └── fix.ps1                         # トラブルシューティングスクリプト
+│
+├── tests/                              # テストスイート
+│   ├── test-claude-integration.js      # Claude Code 統合テスト
+│   ├── test-connection.js              # dev-server 接続テスト
+│   ├── test-narration.js               # 音声ナレーション テスト
+│   ├── test-voice-synthesis.js         # 音声合成機能テスト
+│   └── test-system-prompt.sh           # システムプロンプト テスト
+│
+├── docs/                               # ドキュメント
+│   ├── CODE_ANALYSIS_REPORT.md         # コード分析レポート
+│   ├── PROJECT_STATUS.md               # プロジェクト状況
+│   ├── VOICE_SYNTHESIS_*.md            # 音声合成システムドキュメント
+│   ├── VOICEVOX_SETUP_GUIDE.md         # VOICEVOX セットアップガイド
+│   └── USER_EXPERIENCE_FLOW.md         # UX設計・ユーザーフロー
+│
+├── prompts/                            # LLM用プロンプト定義
+│   └── claude-code-system.txt          # Claude Code システムプロンプト
+│
+├── .agent/                             # Claude Code エージェント関連
+│   ├── memory/                         # ナレッジベース
+│   ├── plans/                          # 計画・ドキュメント
+│   ├── logs/                           # 実行ログ
+│   ├── tasks/                          # タスク管理
+│   └── workflows/                      # ワークフロー定義
+│
+├── .claude/                            # Claude Code 設定
+│   └── settings.json                   # IDE設定
+│
+├── mcp-server/                         # MCP (Model Context Protocol) サーバー
+│   └── ...                             # MCP実装ファイル
+│
+├── esp32s3-cam/                        # ESP32S3 カメラプロジェクト（オプション）
+│   ├── README.md                       # セットアップガイド
+│   └── esp32s3-cam.ino                 # Arduinoスケッチ
+│
+├── .env.example                        # 環境変数テンプレート
+├── .env.local                          # 環境変数（git無視）
+├── .mcp.json                           # MCP サーバー設定
+├── .gitignore                          # Git無視リスト
+│
+├── start-app.bat                       # アプリ起動（Windows）
+├── start-llm.bat                       # LLMサーバー起動（Windows）
+└── start.bat                           # ランチャー（Windows）
 ```
 
 ### エージェントの動作フロー
@@ -198,18 +262,20 @@ VOICEVOX を使用する場合は別途インストールが必要です：
 voicevox_engine
 ```
 
-詳細は [VOICEVOX_SETUP_GUIDE.md](VOICEVOX_SETUP_GUIDE.md) を参照してください。
+詳細は [docs/VOICEVOX_SETUP_GUIDE.md](docs/VOICEVOX_SETUP_GUIDE.md) を参照してください。
 
 ---
 
 ## 🧪 テストスクリプト
+
+テストファイルは `tests/` ディレクトリに配置されています。
 
 ### dev-server 接続テスト
 
 ```bash
 # dev-server が起動しているか、WebSocket 接続が正常か確認
 npm run dev &
-node test-connection.js
+node tests/test-connection.js
 ```
 
 **出力例:**
@@ -224,6 +290,15 @@ node test-connection.js
 
 ✅ Test completed successfully on port 3000!
 ```
+
+### Claude Code 統合テスト
+
+```bash
+npm run dev &
+npm test
+```
+
+詳細は [tests/test-claude-integration.js](tests/test-claude-integration.js) を参照してください。
 
 ### 音声合成テスト（ブラウザコンソール）
 
@@ -244,7 +319,7 @@ test_directVoiceSynthesis = async () => {
 test_directVoiceSynthesis();
 ```
 
-詳細は [VOICE_SYNTHESIS_TEST_GUIDE.md](VOICE_SYNTHESIS_TEST_GUIDE.md) を参照してください。
+詳細は [docs/VOICE_SYNTHESIS_TEST_GUIDE.md](docs/VOICE_SYNTHESIS_TEST_GUIDE.md) を参照してください。
 
 ---
 
@@ -271,7 +346,7 @@ http://localhost:3000/?mcp=1
 - **リアルタイムフィードバック**: tool 実行結果がすぐに Claude に返される
 - **Zundamon キャラ統合**: Claude が Zundamon として自動的に音声ナレーション
 
-詳細は [js/mcp-bridge.js](js/mcp-bridge.js) と [VOICE_SYNTHESIS_SYSTEM.md](VOICE_SYNTHESIS_SYSTEM.md) を参照してください。
+詳細は [js/mcp-bridge.js](js/mcp-bridge.js) と [docs/VOICE_SYNTHESIS_SYSTEM.md](docs/VOICE_SYNTHESIS_SYSTEM.md) を参照してください。
 
 ---
 
@@ -423,13 +498,18 @@ cp .env.example .env.local
 
 ## 📚 追加ドキュメント
 
+ドキュメントは `docs/` ディレクトリに集約されています。
+
 | ドキュメント | 説明 |
 |------------|------|
-| [VOICE_SYNTHESIS_INDEX.md](VOICE_SYNTHESIS_INDEX.md) | 音声合成システムのナビゲーションガイド |
-| [VOICE_SYNTHESIS_SYSTEM.md](VOICE_SYNTHESIS_SYSTEM.md) | アーキテクチャ・実装詳細 |
-| [VOICE_SYNTHESIS_EXAMPLES.md](VOICE_SYNTHESIS_EXAMPLES.md) | コード例・統合パターン |
-| [VOICE_SYNTHESIS_TEST_GUIDE.md](VOICE_SYNTHESIS_TEST_GUIDE.md) | テスト手順・デバッグ方法 |
-| [VOICEVOX_SETUP_GUIDE.md](VOICEVOX_SETUP_GUIDE.md) | VOICEVOX インストール・設定 |
-| [USER_EXPERIENCE_FLOW.md](USER_EXPERIENCE_FLOW.md) | ユーザー操作フロー・UX設計 |
+| [docs/VOICE_SYNTHESIS_INDEX.md](docs/VOICE_SYNTHESIS_INDEX.md) | 音声合成システムのナビゲーションガイド |
+| [docs/VOICE_SYNTHESIS_SYSTEM.md](docs/VOICE_SYNTHESIS_SYSTEM.md) | アーキテクチャ・実装詳細 |
+| [docs/VOICE_SYNTHESIS_EXAMPLES.md](docs/VOICE_SYNTHESIS_EXAMPLES.md) | コード例・統合パターン |
+| [docs/VOICE_SYNTHESIS_TEST_GUIDE.md](docs/VOICE_SYNTHESIS_TEST_GUIDE.md) | テスト手順・デバッグ方法 |
+| [docs/VOICE_SYNTHESIS_TIMING.md](docs/VOICE_SYNTHESIS_TIMING.md) | タイミング制御・同期メカニズム |
+| [docs/VOICEVOX_SETUP_GUIDE.md](docs/VOICEVOX_SETUP_GUIDE.md) | VOICEVOX インストール・設定 |
+| [docs/USER_EXPERIENCE_FLOW.md](docs/USER_EXPERIENCE_FLOW.md) | ユーザー操作フロー・UX設計 |
+| [docs/CODE_ANALYSIS_REPORT.md](docs/CODE_ANALYSIS_REPORT.md) | コード分析レポート |
+| [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | プロジェクト状況・実装進捗 |
 
 ---
