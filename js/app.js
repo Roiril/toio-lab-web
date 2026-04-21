@@ -21,9 +21,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const geminiApiKeyInput = document.getElementById("gemini-api-key");
     const geminiModelInput = document.getElementById("gemini-model");
 
-    const claudeCodeSettingsGroup = document.getElementById("claude-code-settings-group");
-    const mcpWsPortInput = document.getElementById("mcp-ws-port");
-
     const toioStatusDot = document.getElementById("toio-status-dot");
     const toioStatusText = document.getElementById("toio-status-text");
     const cubeInfo = document.getElementById("cube-info");
@@ -58,13 +55,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const combinedToio = new ToioCombined(toioSim, toioBle);
 
     // LocalStorage を優先し、未設定時のみ config.js にフォールバック。
-    // デフォルトは Claude Code (MCP Bridge) — ブラウザ → dev-server → claude CLI → MCP → BLE。
-    const savedProvider = localStorage.getItem('llm_provider') || window.APP_CONFIG?.LLM_PROVIDER || 'claude-code';
+    const savedProvider = localStorage.getItem('llm_provider') || window.APP_CONFIG?.LLM_PROVIDER || 'ollama';
     const savedApiKey = localStorage.getItem('gemini_api_key') || window.APP_CONFIG?.GEMINI_API_KEY || '';
     const savedGeminiModel = localStorage.getItem('gemini_model') || window.APP_CONFIG?.GEMINI_MODEL || 'gemini-2.5-flash';
     const savedOllamaBaseUrl = localStorage.getItem('ollama_base_url') || window.APP_CONFIG?.OLLAMA_URL || 'http://localhost:11434';
     const savedOllamaModel = localStorage.getItem('ollama_model') || window.APP_CONFIG?.OLLAMA_MODEL || 'gemma4:e4b';
-    const savedMcpWsPort = Number(localStorage.getItem('mcp_ws_port')) || 7777;
     const savedCameraUrl = localStorage.getItem('camera_url') || '';
 
     if (llmProviderSelect) llmProviderSelect.value = savedProvider;
@@ -72,7 +67,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (geminiModelInput) geminiModelInput.value = savedGeminiModel;
     if (ollamaBaseUrlInput) ollamaBaseUrlInput.value = savedOllamaBaseUrl;
     if (ollamaModelInput) ollamaModelInput.value = savedOllamaModel;
-    if (mcpWsPortInput) mcpWsPortInput.value = savedMcpWsPort;
     if (cameraUrlInput) cameraUrlInput.value = savedCameraUrl;
 
     // プロバイダー変更時に設定の表示を切り替える
@@ -80,9 +74,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const provider = llmProviderSelect.value;
         geminiSettingsGroup.style.display = provider === 'gemini' ? 'block' : 'none';
         ollamaSettingsGroup.style.display = provider === 'ollama' ? 'block' : 'none';
-        if (claudeCodeSettingsGroup) {
-            claudeCodeSettingsGroup.style.display = provider === 'claude-code' ? 'block' : 'none';
-        }
     };
     if (llmProviderSelect) {
         llmProviderSelect.addEventListener('change', updateSettingsVisibility);
@@ -95,7 +86,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (savedProvider === 'gemini') {
         llmClient = new GeminiClient(savedApiKey, savedGeminiModel);
     }
-    // provider === 'claude-code' → llmClient stays null; chat input is disabled.
 
     const sessionMemory = new SessionMemory();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
@@ -108,7 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentThinkingNode = null;
     let hasSyncedInitialPosition = false;
 
-    // Agent Loop initialization (skipped when running as an MCP bridge)
+    // Agent Loop initialization
     let agentLoop = llmClient
         ? new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, { onStep: handleAgentStep })
         : null;
@@ -118,87 +108,6 @@ document.addEventListener("DOMContentLoaded", () => {
     updateToioUIState();
     if (savedCameraUrl) {
         cameraClient.checkConnection().then(updateCameraStatus);
-    }
-
-    // --- MCP Bridge ---
-    // Enabled when provider === 'claude-code', or forced via ?mcp=1 URL param.
-    const urlParams = new URLSearchParams(window.location.search);
-    const forceBridge = urlParams.get('mcp') === '1';
-    const bridgeEnabled = forceBridge || savedProvider === 'claude-code';
-
-    if (bridgeEnabled) {
-        const mcpPort = Number(urlParams.get('mcpPort')) || savedMcpWsPort;
-        const bridge = new McpBridge(executor, {
-            port: mcpPort,
-            onStatus: ({ state, url }) => {
-                if (state === 'open') {
-                    addMessage("system", `MCPブリッジ接続 (${url || `ws://localhost:${mcpPort}`}) — toioツールが利用可能になりました。`);
-                } else if (state === 'disconnected') {
-                    addMessage("system", "MCPブリッジ切断。Claudeがツールを呼ぶと自動で再接続します。");
-                }
-            }
-        });
-        bridge.connect();
-        window.mcpBridge = bridge;
-    }
-
-    // --- Claude Chat Client (for claude-code provider) ---
-    // ブラウザのチャット入力を dev-server の /claude WS に中継し、claude CLI へ渡す。
-    let claudeChat = null;
-    if (savedProvider === 'claude-code') {
-        let claudeBackendAnnounced = false;
-        claudeChat = new ClaudeChatClient({
-            onMessage: (msg) => {
-                switch (msg.type) {
-                    case 'ready':
-                        // Announce the backend once, using the real model name
-                        // the server reports rather than a hardcoded label.
-                        if (!claudeBackendAnnounced) {
-                            const modelLabel = msg.model || 'claude';
-                            addMessage('system', `Claude Code バックエンド接続 (${modelLabel}, streaming mode)。`);
-                            claudeBackendAnnounced = true;
-                        }
-                        break;
-                    case 'working':
-                        // Already showing "processing" from submitChat
-                        break;
-                    case 'assistant': {
-                        const meta = [];
-                        if (msg.latency_ms) meta.push(`${Math.round(msg.latency_ms)}ms`);
-                        const suffix = meta.length ? `\n\n_(${meta.join(' · ')})_` : '';
-                        addMessage('ai', (msg.text || '(空のレスポンス)') + suffix);
-                        // Don't close state yet — wait for 'result'
-                        break;
-                    }
-                    case 'result':
-                        // Turn complete
-                        setChatProcessingState(false);
-                        break;
-                    case 'error':
-                        addMessage('system', `エラー: ${msg.error}`);
-                        setChatProcessingState(false);
-                        break;
-                    case 'reset-ack':
-                        addMessage('system', 'Claudeセッションをリセットしました。');
-                        setChatProcessingState(false);
-                        break;
-                    case 'disconnected':
-                        // claude プロセスが落ちた — turn 中なら UI を解放しないと
-                        // 送信ボタンが復活せず詰まる。
-                        console.log('[ClaudeChat] claude process disconnected');
-                        if (isProcessingChat) setChatProcessingState(false);
-                        break;
-                }
-            },
-            onStatus: ({ state }) => {
-                if (state === 'closed') {
-                    addMessage('system', 'Claude Code バックエンド切断。再接続を試行中...');
-                    if (isProcessingChat) setChatProcessingState(false);
-                }
-            }
-        });
-        claudeChat.connect();
-        window.claudeChat = claudeChat;
     }
 
     // Sync loop removed: sim now mirrors BLE via onIdUpdateCallback.
@@ -259,12 +168,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (agentLoop) {
             agentLoop.cancel();
             cancelBtn.disabled = true;
-        } else if (claudeChat) {
-            // In claude-code mode there's no Ollama/Gemini agent loop to cancel.
-            // Reset the streaming session — dev-server kills the claude subprocess
-            // and respawns on the next message.
-            claudeChat.reset();
-            cancelBtn.disabled = true;
         }
     });
 
@@ -293,24 +196,18 @@ document.addEventListener("DOMContentLoaded", () => {
         const newGeminiModel = geminiModelInput.value.trim() || 'gemini-2.5-flash';
         const newOllamaBaseUrl = ollamaBaseUrlInput.value.trim() || 'http://localhost:11434';
         const newOllamaModel = ollamaModelInput.value.trim() || 'gemma4:e4b';
-        const newMcpWsPort = Number(mcpWsPortInput?.value) || 7777;
 
         localStorage.setItem('llm_provider', newProvider);
         localStorage.setItem('gemini_api_key', newApiKey);
         localStorage.setItem('gemini_model', newGeminiModel);
         localStorage.setItem('ollama_base_url', newOllamaBaseUrl);
         localStorage.setItem('ollama_model', newOllamaModel);
-        localStorage.setItem('mcp_ws_port', String(newMcpWsPort));
 
         const newCameraUrl = cameraUrlInput.value.trim();
         localStorage.setItem('camera_url', newCameraUrl);
 
-        // Switching between claude-code and local-LLM providers (or changing
-        // the MCP port) requires re-wiring the bridge and chat input — reload
-        // is simpler and safer than migrating state mid-session.
         const providerChanged = newProvider !== savedProvider;
-        const portChanged = newProvider === 'claude-code' && newMcpWsPort !== savedMcpWsPort;
-        if (providerChanged || portChanged) {
+        if (providerChanged) {
             location.reload();
             return;
         }
@@ -421,8 +318,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     async function checkLlmConnection() {
         if (!llmClient) {
-            llmStatusDot.className = "dot connected";
-            llmStatusText.innerText = "Claude Code (MCP Bridge)";
+            llmStatusDot.className = "dot disconnected";
+            llmStatusText.innerText = "No LLM Provider Selected";
             return;
         }
         const isOllama = llmClient instanceof OllamaClient;
@@ -458,21 +355,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const text = chatInput.value.trim();
         chatInput.value = "";
-
-        // --- Claude Code (MCP Bridge) mode: route through dev-server /claude WS ---
-        if (claudeChat) {
-            if (!claudeChat.isReady()) {
-                console.warn('[submitChat] claude backend not ready, state:', claudeChat.ws?.readyState);
-                addMessage("system", "Claude Code バックエンドに接続できていません。`npm run dev` が実行中か確認し、ブラウザをリロードしてください。");
-                return;
-            }
-            addMessage("user", text);
-            setChatProcessingState(true);
-            claudeChat.send(text);
-            // Assistant response / error arrives via claudeChat.onMessage, which
-            // calls setChatProcessingState(false).
-            return;
-        }
 
         // --- Local LLM (Ollama / Gemini) ---
         if (pendingCameraCapture) {

@@ -2,34 +2,16 @@
  * toio-lab-web dev server
  *
  * Responsibilities:
- *   1. Serve static files (index.html, js/*, etc.) — replaces `npx serve`.
- *   2. Expose a WebSocket at /claude for the browser to chat with Claude Code.
- *   3. Spawn the `claude` CLI per user message (with session resume) so the
- *      browser UI becomes the primary driver. MCP tool calls flow back to the
- *      browser via the existing mcp-server (started by claude via .mcp.json).
- *
- * Design notes:
- *   - One-shot `claude -p` per message keeps things simple. Session continuity
- *     is provided by --resume <sessionId>.
- *   - `--dangerously-skip-permissions` auto-approves MCP tool invocations so
- *     the flow stays non-interactive. This is dev-only.
- *   - The MCP server (mcp-server/server.mjs) is spawned as claude's child via
- *     .mcp.json, so it restarts per message. The browser McpBridge has a
- *     reconnect loop that handles this transparently (brief lag per turn).
- *   - Auto port fallback: if the configured PORT is in use, tries PORT+1, PORT+2, etc.
+ *   1. Serve static files (index.html, js/*, etc.)
  */
 
 const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
-const { WebSocketServer } = require('ws');
 
 const ROOT = path.resolve(__dirname, '..');
 const PORT = Number(process.env.PORT) || 3000;
-const MODEL = process.env.CLAUDE_MODEL || 'claude-haiku-4-5-20251001';
 const MAX_PORT = PORT + 100;
-const LOG_FILE = path.join(ROOT, 'dev-server.log');
 
 const MIME = {
     '.html': 'text/html; charset=utf-8',
@@ -46,14 +28,7 @@ const MIME = {
 };
 
 function log(...args) { console.log('[dev-server]', ...args); }
-function warn(...args) { console.warn('[dev-server]', ...args); }
 
-// ---------- State ----------
-let claudeProc = null;              // long-lived claude subprocess (streaming mode)
-let claudeStdoutBuf = '';           // line buffer for claude stdout
-let wsClients = new Set();           // all connected WS clients
-
-// ---------- Server Creation (factored for port retry) ----------
 function createServers() {
     const httpServer = http.createServer((req, res) => {
         let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
@@ -74,220 +49,19 @@ function createServers() {
         });
     });
 
-    const wss = new WebSocketServer({ noServer: true });
-
-    httpServer.on('upgrade', (req, socket, head) => {
-        const { pathname } = new URL(req.url, 'http://localhost');
-        if (pathname === '/claude') {
-            wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
-        } else {
-            socket.destroy();
-        }
-    });
-
-    wss.on('connection', (ws) => {
-        wsClients.add(ws);
-        ws.send(JSON.stringify({
-            type: 'ready',
-            model: MODEL,
-            streaming: true,
-        }));
-        log(`WS client connected (${wsClients.size} clients)`);
-
-        ws.on('message', async (raw) => {
-            let msg;
-            try { msg = JSON.parse(raw.toString()); } catch { return; }
-
-            if (msg.type === 'user' && typeof msg.text === 'string' && msg.text.trim()) {
-                sendToClaudeStream(msg.text);
-            } else if (msg.type === 'reset') {
-                restartClaudeStream();
-                broadcast({ type: 'reset-ack' });
-            }
-        });
-
-        ws.on('close', () => {
-            wsClients.delete(ws);
-            log(`WS client disconnected (${wsClients.size} clients)`);
-        });
-    });
-
-    return { httpServer, wss };
+    return { httpServer };
 }
 
-// ---------- Claude Streaming Mode ----------
-function broadcast(msg) {
-    const str = JSON.stringify(msg);
-    for (const ws of wsClients) {
-        if (ws.readyState === 1) ws.send(str);
-    }
-}
-
-function startClaudeStream() {
-    if (claudeProc) return; // already running
-
-    const toioSystemPrompt = `You are controlling a toio cube robot via MCP tools.
-
-## toio Mat Coordinate System
-- Mat dimensions: 410×410 mm
-- Coordinate origin (0,0): top-left corner
-- X-axis: points right (0→410)
-- Y-axis: points down (0→410)
-- Angle: 0°=facing right, 90°=facing down, 180°=facing left, 270°=facing up
-
-## Available Tools
-Use these tools to control the toio cube:
-- \`move_to(x, y, angle)\`: Move to absolute coordinate and face direction
-- \`move_path(waypoints)\`: Move along multiple waypoints sequentially
-- \`spin(direction, duration_ms, speed)\`: Spin in place (cw/ccw, 500-2500ms, 0-100)
-- \`set_light(r, g, b, duration_ms)\`: Set LED color (0-255 each, 0=infinite)
-- \`set_light_pattern(frames, repetitions)\`: Animated light pattern
-- \`play_sound(note_id, duration_ms)\`: Play beep (60=C4, 62=D4, etc)
-- \`play_melody(notes)\`: Play sequence of notes
-- \`get_position()\`: Get current position {x, y, angle, margins}
-- \`get_battery()\`: Get battery 0-100%
-- \`stop()\`: Emergency stop
-- \`wait(duration_ms)\`: Pause
-- \`think(thought)\`: Plan your approach
-
-## Tips
-- Always use \`get_position()\` before complex moves to verify current state
-- Check \`get_battery()\` periodically
-- The \`move_to\` with warning field means target unreachable—retry or adjust
-- For smooth movement, break paths into waypoints
-- Margins from \`get_position()\` tell you how close you are to edges`;
-
-    const args = [
-        '-p',
-        '--input-format', 'stream-json',
-        '--output-format', 'stream-json',
-        '--verbose',
-        '--append-system-prompt', toioSystemPrompt,
-        '--model', MODEL,
-        '--dangerously-skip-permissions',
-    ];
-
-    log('spawning claude (streaming mode):', args.join(' '));
-    claudeProc = spawn('claude', args, {
-        cwd: ROOT,
-        shell: process.platform === 'win32',
-    });
-
-    claudeProc.stdout.on('data', (chunk) => {
-        claudeStdoutBuf += chunk.toString();
-        let idx;
-        while ((idx = claudeStdoutBuf.indexOf('\n')) >= 0) {
-            const line = claudeStdoutBuf.slice(0, idx);
-            claudeStdoutBuf = claudeStdoutBuf.slice(idx + 1);
-            if (!line.trim()) continue;
-            try {
-                const obj = JSON.parse(line);
-                log('[claude output]', JSON.stringify(obj).slice(0, 200));
-                handleClaudeStreamMessage(obj);
-            } catch (e) {
-                warn('parse error on line:', line.slice(0, 150));
-            }
-        }
-    });
-
-    claudeProc.stderr.on('data', (d) => {
-        const msg = d.toString().trim();
-        if (msg) {
-            warn('claude stderr:', msg.slice(0, 500));
-        }
-    });
-
-    claudeProc.on('error', (err) => {
-        warn('spawn error:', err.message);
-        broadcast({
-            type: 'error',
-            error: `claude CLI の起動に失敗: ${err.message}。Claude Code がパスに入っているか確認してください。`,
-        });
-        claudeProc = null;
-    });
-
-    claudeProc.on('exit', (code) => {
-        log('claude exited', code);
-        claudeProc = null;
-        broadcast({ type: 'disconnected' });
-    });
-
-    broadcast({ type: 'ready', model: MODEL, streaming: true });
-}
-
-function sendToClaudeStream(userText) {
-    startClaudeStream();
-    const line = JSON.stringify({
-        type: 'user',
-        message: { role: 'user', content: userText },
-    });
-    if (claudeProc && claudeProc.stdin.writable) {
-        claudeProc.stdin.write(line + '\n', (err) => {
-            if (err) {
-                warn('stdin write error:', err.message);
-                broadcast({ type: 'error', error: `claude への入力失敗: ${err.message}` });
-            }
-        });
-        broadcast({ type: 'working' });
-    } else {
-        warn('claude process not available for writing');
-        broadcast({ type: 'error', error: 'claude プロセスが起動していません。`npm run dev` を確認してください。' });
-    }
-}
-
-function restartClaudeStream() {
-    if (claudeProc) {
-        claudeProc.kill();
-        claudeProc = null;
-    }
-    claudeStdoutBuf = '';
-    startClaudeStream();
-}
-
-function handleClaudeStreamMessage(obj) {
-    // stream-json event types we care about: "assistant" (text blocks — tool_use
-    // blocks inside content are handled by claude↔mcp-server directly) and
-    // "result" (turn complete). Other types (system init, user tool_result
-    // echoes, etc.) are ignored.
-    if (obj.type === 'assistant' && obj.message?.content) {
-        const textParts = [];
-        for (const block of obj.message.content) {
-            if (block.type === 'text' && block.text) {
-                textParts.push(block.text);
-            }
-        }
-        if (textParts.length > 0) {
-            broadcast({ type: 'assistant', text: textParts.join('\n') });
-        }
-    } else if (obj.type === 'result') {
-        broadcast({ type: 'result', done: true });
-    }
-}
-
-// ---------- Start (with port fallback) ----------
 function tryListen(attemptPort) {
     if (attemptPort > MAX_PORT) {
         console.error(`[dev-server] Could not find an open port between ${PORT} and ${MAX_PORT}`);
         process.exit(1);
     }
 
-    // One-time cleanup of zombie MCP server processes at startup (Windows only)
-    if (process.platform === 'win32') {
-        try {
-            require('child_process').execSync(
-                'powershell -Command "Get-Process -ErrorAction SilentlyContinue | Where-Object {$_.Name -eq \'node\' -and $_.CommandLine -like \'*mcp-server*\'} | Stop-Process -Force 2>/dev/null" || true',
-                { stdio: 'ignore' }
-            );
-        } catch (e) {
-            // Ignore cleanup errors
-        }
-    }
-
-    const { httpServer, wss } = createServers();
+    const { httpServer } = createServers();
 
     httpServer.listen(attemptPort, () => {
-        log(`http://localhost:${attemptPort}  (model: ${MODEL})`);
-        log(`chat WS at ws://localhost:${attemptPort}/claude`);
+        log(`http://localhost:${attemptPort}`);
     });
 
     httpServer.once('error', (err) => {
@@ -299,23 +73,6 @@ function tryListen(attemptPort) {
             throw err;
         }
     });
-
-    // Graceful shutdown
-    const cleanup = () => {
-        log('shutting down and killing claude process...');
-        if (claudeProc && !claudeProc.killed) {
-            claudeProc.kill('SIGTERM');
-            // Force kill after timeout if graceful shutdown didn't work
-            setTimeout(() => {
-                if (claudeProc && !claudeProc.killed) {
-                    claudeProc.kill('SIGKILL');
-                }
-            }, 2000);
-        }
-    };
-    process.on('SIGINT', () => { cleanup(); process.exit(0); });
-    process.on('SIGTERM', () => { cleanup(); process.exit(0); });
-    process.on('exit', cleanup);
 }
 
 tryListen(PORT);
