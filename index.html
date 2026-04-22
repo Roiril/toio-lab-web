@@ -61,19 +61,21 @@
                 </section>
 
                 <section class="control-section">
-                    <h2>Camera (ESP32S3)</h2>
+                    <h2>Camera</h2>
                     <div class="status-indicator">
                         <span id="camera-status-dot" class="dot disconnected"></span>
                         <span id="camera-status-text">Disconnected</span>
                     </div>
                     <div class="camera-preview-box">
                         <img id="camera-preview-img" class="camera-preview-img" alt="Camera feed" style="display:none">
+                        <video id="camera-preview-video" class="camera-preview-img" autoplay muted playsinline style="display:none"></video>
                         <div id="camera-placeholder" class="camera-placeholder">No feed</div>
                     </div>
                     <div class="btn-group" style="margin-top: 10px;">
                         <button id="camera-connect-btn" class="primary-btn">Connect</button>
                         <button id="camera-preview-btn" class="secondary-btn" disabled>Preview</button>
                     </div>
+                    <select id="camera-device-select" class="camera-device-select" style="display:none; margin-top:8px;"></select>
                 </section>
             </aside>
 
@@ -161,9 +163,16 @@
 
 
             <div class="form-group">
+                <label for="camera-source">Camera Source</label>
+                <select id="camera-source">
+                    <option value="usb">USB / 内蔵 Web カメラ（デフォルト）</option>
+                    <option value="esp32">ESP32S3 Sense (HTTP)</option>
+                </select>
+            </div>
+            <div class="form-group" id="camera-url-group" style="display:none">
                 <label for="camera-url-input">Camera URL (ESP32S3)</label>
                 <input type="text" id="camera-url-input" placeholder="http://192.168.x.x">
-                <small style="color: var(--text-muted); font-size: 11px;">シリアルモニターに表示されるIPアドレスを入力</small>
+                <small class="hint">シリアルモニターに表示されるIPアドレスを入力</small>
             </div>
             <div class="form-group">
                 <label>校正辞書（ユーザー語彙の記憶）</label>

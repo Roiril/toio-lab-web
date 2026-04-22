@@ -877,6 +877,18 @@ button:disabled {
 }
 
 /* Camera Panel */
+.camera-device-select {
+    width: 100%;
+    padding: 5px 8px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    font-family: var(--font-main);
+    outline: none;
+}
+.camera-device-select:focus { border-color: var(--accent); }
+
 .camera-preview-box {
     width: 100%;
     aspect-ratio: 4 / 3;

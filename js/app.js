@@ -38,6 +38,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const cameraStatusDot = document.getElementById("camera-status-dot");
     const cameraStatusText = document.getElementById("camera-status-text");
     const cameraPreviewImg = document.getElementById("camera-preview-img");
+    const cameraPreviewVideo = document.getElementById("camera-preview-video");
     const cameraPlaceholder = document.getElementById("camera-placeholder");
     const cameraConnectBtn = document.getElementById("camera-connect-btn");
     const cameraPreviewBtn = document.getElementById("camera-preview-btn");
@@ -45,7 +46,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const cameraAttachPreview = document.getElementById("camera-attach-preview");
     const cameraAttachImg = document.getElementById("camera-attach-img");
     const cameraAttachClear = document.getElementById("camera-attach-clear");
+    const cameraSourceSelect = document.getElementById("camera-source");
     const cameraUrlInput = document.getElementById("camera-url-input");
+    const cameraUrlGroup = document.getElementById("camera-url-group");
+    const cameraDeviceSelect = document.getElementById("camera-device-select");
 
     // --- State & Instances ---
     const spatialAwareness = new SpatialAwareness();
@@ -60,7 +64,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const savedGeminiModel = localStorage.getItem('gemini_model') || window.APP_CONFIG?.GEMINI_MODEL || 'gemini-2.5-flash';
     const savedOllamaBaseUrl = localStorage.getItem('ollama_base_url') || window.APP_CONFIG?.OLLAMA_URL || 'http://localhost:11434';
     const savedOllamaModel = localStorage.getItem('ollama_model') || window.APP_CONFIG?.OLLAMA_MODEL || 'gemma4:e4b';
+    const savedCameraSource = localStorage.getItem('camera_source') || 'usb';
     const savedCameraUrl = localStorage.getItem('camera_url') || '';
+    let savedCameraDeviceId = localStorage.getItem('camera_device_id') || '';
 
     if (llmProviderSelect) llmProviderSelect.value = savedProvider;
     if (geminiApiKeyInput) geminiApiKeyInput.value = savedApiKey;
@@ -68,6 +74,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (ollamaBaseUrlInput) ollamaBaseUrlInput.value = savedOllamaBaseUrl;
     if (ollamaModelInput) ollamaModelInput.value = savedOllamaModel;
     if (cameraUrlInput) cameraUrlInput.value = savedCameraUrl;
+    if (cameraSourceSelect) cameraSourceSelect.value = savedCameraSource;
+    const updateCameraUrlVisibility = () => {
+        if (cameraUrlGroup) cameraUrlGroup.style.display = (cameraSourceSelect.value === 'esp32') ? 'block' : 'none';
+    };
+    if (cameraSourceSelect) {
+        cameraSourceSelect.addEventListener('change', updateCameraUrlVisibility);
+        updateCameraUrlVisibility();
+    }
 
     // プロバイダー変更時に設定の表示を切り替える
     const updateSettingsVisibility = () => {
@@ -90,7 +104,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const sessionMemory = new SessionMemory();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
     const executor = new ToolExecutor(combinedToio, environment, sessionMemory);
-    const cameraClient = new CameraClient(savedCameraUrl);
+    let cameraClient = createCameraClient(savedCameraSource, savedCameraUrl, savedCameraDeviceId);
+
+    function createCameraClient(source, url, deviceId) {
+        return source === 'esp32'
+            ? new Esp32CameraClient(url)
+            : new UsbCameraClient(deviceId);
+    }
 
     // UI state
     let isProcessingChat = false;
@@ -105,7 +125,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- initialization ---
     checkLlmConnection();
     updateToioUIState();
-    if (savedCameraUrl) {
+    // USB カメラはデフォルトで存在チェック、ESP32 は URL 設定済みのときだけチェック
+    if (savedCameraSource === 'usb' || (savedCameraSource === 'esp32' && savedCameraUrl)) {
         cameraClient.checkConnection().then(updateCameraStatus);
     }
 
@@ -228,7 +249,9 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem('ollama_model', newOllamaModel);
 
         const newCameraUrl = cameraUrlInput.value.trim();
+        const newCameraSource = cameraSourceSelect ? cameraSourceSelect.value : 'usb';
         localStorage.setItem('camera_url', newCameraUrl);
+        localStorage.setItem('camera_source', newCameraSource);
 
         const providerChanged = newProvider !== savedProvider;
         if (providerChanged) {
@@ -249,12 +272,22 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        cameraClient.setUrl(newCameraUrl);
-        if (newCameraUrl) {
+        // ソース切り替え: プレビュー停止して Client を作り直し
+        if (isPreviewing) {
+            cameraClient.stopPreview();
+            isPreviewing = false;
+            cameraPreviewBtn.textContent = 'Preview';
+            hideAllPreviews();
+            cameraPlaceholder.style.display = 'flex';
+        }
+        cameraClient = createCameraClient(newCameraSource, newCameraUrl, savedCameraDeviceId);
+
+        if (newCameraSource === 'usb' || (newCameraSource === 'esp32' && newCameraUrl)) {
             cameraClient.checkConnection().then(updateCameraStatus);
         } else {
             updateCameraStatus(false);
         }
+        refreshCameraDeviceSelect();
 
         settingsModal.classList.remove('active');
         checkLlmConnection();
@@ -271,6 +304,59 @@ document.addEventListener("DOMContentLoaded", () => {
     // Camera event listeners
     let isPreviewing = false;
 
+    function cameraPreviewTarget() {
+        return cameraClient instanceof UsbCameraClient ? cameraPreviewVideo : cameraPreviewImg;
+    }
+
+    function hideAllPreviews() {
+        cameraPreviewImg.style.display = 'none';
+        cameraPreviewVideo.style.display = 'none';
+    }
+
+    // USB カメラ選択 UI の更新。複数台あるときのみ表示する。
+    async function refreshCameraDeviceSelect() {
+        if (!cameraDeviceSelect) return;
+        if (!(cameraClient instanceof UsbCameraClient)) {
+            cameraDeviceSelect.style.display = 'none';
+            return;
+        }
+        const devices = await cameraClient.listDevices();
+        if (devices.length === 0) {
+            cameraDeviceSelect.style.display = 'none';
+            return;
+        }
+        cameraDeviceSelect.innerHTML = '';
+        devices.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.deviceId;
+            opt.textContent = d.label;
+            cameraDeviceSelect.appendChild(opt);
+        });
+        // 保存済み deviceId が選択肢にあれば選ぶ、なければ先頭
+        if (savedCameraDeviceId && devices.some(d => d.deviceId === savedCameraDeviceId)) {
+            cameraDeviceSelect.value = savedCameraDeviceId;
+        } else {
+            savedCameraDeviceId = devices[0].deviceId;
+            cameraClient.setDeviceId(savedCameraDeviceId);
+        }
+        // 1 台しかない場合は隠す（選ぶ意味がないので）
+        cameraDeviceSelect.style.display = devices.length > 1 ? 'block' : 'none';
+    }
+
+    if (cameraDeviceSelect) {
+        cameraDeviceSelect.addEventListener('change', () => {
+            const id = cameraDeviceSelect.value;
+            savedCameraDeviceId = id;
+            localStorage.setItem('camera_device_id', id);
+            if (cameraClient instanceof UsbCameraClient) {
+                cameraClient.setDeviceId(id);
+            }
+        });
+    }
+
+    // 初期読み込み時にデバイスリストを列挙（USB 時のみ）
+    refreshCameraDeviceSelect();
+
     cameraConnectBtn.addEventListener('click', async () => {
         cameraConnectBtn.disabled = true;
         cameraConnectBtn.textContent = '確認中...';
@@ -278,22 +364,37 @@ document.addEventListener("DOMContentLoaded", () => {
         updateCameraStatus(ok);
         cameraConnectBtn.disabled = false;
         cameraConnectBtn.textContent = ok ? 'Reconnect' : 'Connect';
-        if (!ok) addMessage("system", "カメラに接続できませんでした。設定でURLを確認してください。");
+        if (!ok) {
+            const msg = (cameraClient instanceof UsbCameraClient)
+                ? "Web カメラが見つかりません。ブラウザの権限を確認してください。"
+                : "カメラに接続できませんでした。設定で URL を確認してください。";
+            addMessage("system", msg);
+        }
     });
 
-    cameraPreviewBtn.addEventListener('click', () => {
+    cameraPreviewBtn.addEventListener('click', async () => {
         if (isPreviewing) {
             cameraClient.stopPreview();
             isPreviewing = false;
             cameraPreviewBtn.textContent = 'Preview';
-            cameraPreviewImg.style.display = 'none';
+            hideAllPreviews();
             cameraPlaceholder.style.display = 'flex';
-        } else {
-            cameraPreviewImg.style.display = 'block';
+            return;
+        }
+        try {
             cameraPlaceholder.style.display = 'none';
-            cameraClient.startPreview(cameraPreviewImg, 5);
+            const target = cameraPreviewTarget();
+            hideAllPreviews();
+            target.style.display = 'block';
+            await cameraClient.startPreview(target, 5);
             isPreviewing = true;
             cameraPreviewBtn.textContent = 'Stop';
+            // 権限が付与されるとデバイスラベルが取れるようになるのでリスト更新
+            refreshCameraDeviceSelect();
+        } catch (e) {
+            hideAllPreviews();
+            cameraPlaceholder.style.display = 'flex';
+            addMessage("system", "カメラのプレビュー開始に失敗: " + e.message);
         }
     });
 
