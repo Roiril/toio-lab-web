@@ -53,6 +53,21 @@ class UsbCameraClient {
     }
 
     /**
+     * getUserMedia 権限が取れているかを推定する。
+     * enumerateDevices の label が空でなければ権限付与済み。
+     */
+    async hasPermission() {
+        if (!navigator.mediaDevices?.enumerateDevices) return false;
+        try {
+            const all = await navigator.mediaDevices.enumerateDevices();
+            const videos = all.filter(d => d.kind === 'videoinput');
+            return videos.length > 0 && videos.some(d => d.label && d.label.length > 0);
+        } catch {
+            return false;
+        }
+    }
+
+    /**
      * 利用可能な videoinput デバイスの配列を返す。
      * getUserMedia 権限が未付与だと label が空文字になる点に注意。
      */

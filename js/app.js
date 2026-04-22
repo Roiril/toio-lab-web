@@ -125,10 +125,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // --- initialization ---
     checkLlmConnection();
     updateToioUIState();
-    // USB カメラはデフォルトで存在チェック、ESP32 は URL 設定済みのときだけチェック
-    if (savedCameraSource === 'usb' || (savedCameraSource === 'esp32' && savedCameraUrl)) {
-        cameraClient.checkConnection().then(updateCameraStatus);
-    }
+    // カメラ初期化（USB: 権限があれば自動プレビュー、ESP32: URL 設定済みなら存在チェック）
+    initCameraOnLoad();
 
     // Sync loop removed: sim now mirrors BLE via onIdUpdateCallback.
 
@@ -277,17 +275,10 @@ document.addEventListener("DOMContentLoaded", () => {
             cameraClient.stopPreview();
             isPreviewing = false;
             cameraPreviewBtn.textContent = 'Preview';
-            hideAllPreviews();
-            cameraPlaceholder.style.display = 'flex';
         }
         cameraClient = createCameraClient(newCameraSource, newCameraUrl, savedCameraDeviceId);
-
-        if (newCameraSource === 'usb' || (newCameraSource === 'esp32' && newCameraUrl)) {
-            cameraClient.checkConnection().then(updateCameraStatus);
-        } else {
-            updateCameraStatus(false);
-        }
-        refreshCameraDeviceSelect();
+        setPlaceholder('No feed');
+        initCameraOnLoad();
 
         settingsModal.classList.remove('active');
         checkLlmConnection();
@@ -313,7 +304,28 @@ document.addEventListener("DOMContentLoaded", () => {
         cameraPreviewVideo.style.display = 'none';
     }
 
-    // USB カメラ選択 UI の更新。複数台あるときのみ表示する。
+    /**
+     * プレースホルダー（No feed 表示エリア）の内容を差し替える。
+     * action を指定するとボタンを表示して再試行などに使える。
+     */
+    function setPlaceholder(message, action) {
+        hideAllPreviews();
+        cameraPlaceholder.style.display = 'flex';
+        cameraPlaceholder.innerHTML = '';
+        const msg = document.createElement('div');
+        msg.className = 'camera-placeholder-msg';
+        msg.textContent = message;
+        cameraPlaceholder.appendChild(msg);
+        if (action) {
+            const btn = document.createElement('button');
+            btn.textContent = action.label;
+            btn.className = 'secondary-btn camera-placeholder-btn';
+            btn.addEventListener('click', action.onClick);
+            cameraPlaceholder.appendChild(btn);
+        }
+    }
+
+    // USB カメラ選択 UI の更新。USB モードで 1 台でもあれば表示する。
     async function refreshCameraDeviceSelect() {
         if (!cameraDeviceSelect) return;
         if (!(cameraClient instanceof UsbCameraClient)) {
@@ -337,39 +349,101 @@ document.addEventListener("DOMContentLoaded", () => {
             cameraDeviceSelect.value = savedCameraDeviceId;
         } else {
             savedCameraDeviceId = devices[0].deviceId;
+            localStorage.setItem('camera_device_id', savedCameraDeviceId);
             cameraClient.setDeviceId(savedCameraDeviceId);
         }
-        // 1 台しかない場合は隠す（選ぶ意味がないので）
-        cameraDeviceSelect.style.display = devices.length > 1 ? 'block' : 'none';
+        // USB モードのときは常に表示（1 台しかなくても現在使用中のカメラが見えるように）
+        cameraDeviceSelect.style.display = 'block';
+    }
+
+    // USB カメラのプレビュー開始（権限要求を兼ねる）。成功時 true を返す。
+    async function startUsbPreview() {
+        try {
+            hideAllPreviews();
+            const target = cameraPreviewTarget();
+            target.style.display = 'block';
+            await cameraClient.startPreview(target, 5);
+            isPreviewing = true;
+            cameraPreviewBtn.textContent = 'Stop';
+            updateCameraStatus(true);
+            cameraPlaceholder.style.display = 'none';
+            // 権限付与後はラベルが取れるのでリスト更新
+            await refreshCameraDeviceSelect();
+            return true;
+        } catch (e) {
+            isPreviewing = false;
+            cameraPreviewBtn.textContent = 'Preview';
+            updateCameraStatus(false);
+            const denied = /Permission|NotAllowed|denied/i.test(e.name + ' ' + e.message);
+            const msg = denied
+                ? 'カメラへのアクセスが拒否されました。ブラウザの設定で許可してください。'
+                : 'カメラを開始できませんでした: ' + e.message;
+            setPlaceholder(msg, { label: '再試行', onClick: () => startUsbPreview() });
+            return false;
+        }
+    }
+
+    // 初期化: USB は権限があれば自動プレビュー、無ければ「有効にする」ボタンを出す
+    async function initCameraOnLoad() {
+        if (cameraClient instanceof UsbCameraClient) {
+            await refreshCameraDeviceSelect();
+            const hasDevice = await cameraClient.checkConnection();
+            if (!hasDevice) {
+                updateCameraStatus(false);
+                setPlaceholder('Web カメラが見つかりません。', {
+                    label: '再試行',
+                    onClick: () => initCameraOnLoad()
+                });
+                return;
+            }
+            const permitted = await cameraClient.hasPermission();
+            if (permitted) {
+                await startUsbPreview();
+            } else {
+                updateCameraStatus(true); // デバイスは存在する
+                setPlaceholder('カメラへのアクセス許可が必要です。', {
+                    label: 'カメラを有効にする',
+                    onClick: () => startUsbPreview()
+                });
+            }
+        } else if (savedCameraUrl) {
+            const ok = await cameraClient.checkConnection();
+            updateCameraStatus(ok);
+        } else {
+            updateCameraStatus(false);
+        }
     }
 
     if (cameraDeviceSelect) {
-        cameraDeviceSelect.addEventListener('change', () => {
+        cameraDeviceSelect.addEventListener('change', async () => {
             const id = cameraDeviceSelect.value;
             savedCameraDeviceId = id;
             localStorage.setItem('camera_device_id', id);
             if (cameraClient instanceof UsbCameraClient) {
                 cameraClient.setDeviceId(id);
+                // 選択したら即プレビューを起こす（まだ開いてなければ開く）
+                if (!isPreviewing) {
+                    await startUsbPreview();
+                }
+                // 起動中なら setDeviceId 内で再開するので何もしない
             }
         });
     }
 
-    // 初期読み込み時にデバイスリストを列挙（USB 時のみ）
-    refreshCameraDeviceSelect();
-
     cameraConnectBtn.addEventListener('click', async () => {
         cameraConnectBtn.disabled = true;
         cameraConnectBtn.textContent = '確認中...';
-        const ok = await cameraClient.checkConnection();
-        updateCameraStatus(ok);
-        cameraConnectBtn.disabled = false;
-        cameraConnectBtn.textContent = ok ? 'Reconnect' : 'Connect';
-        if (!ok) {
-            const msg = (cameraClient instanceof UsbCameraClient)
-                ? "Web カメラが見つかりません。ブラウザの権限を確認してください。"
-                : "カメラに接続できませんでした。設定で URL を確認してください。";
-            addMessage("system", msg);
+        if (cameraClient instanceof UsbCameraClient) {
+            await initCameraOnLoad();
+        } else {
+            const ok = await cameraClient.checkConnection();
+            updateCameraStatus(ok);
+            if (!ok) {
+                addMessage("system", "カメラに接続できませんでした。設定で URL を確認してください。");
+            }
         }
+        cameraConnectBtn.disabled = false;
+        cameraConnectBtn.textContent = 'Reconnect';
     });
 
     cameraPreviewBtn.addEventListener('click', async () => {
@@ -377,24 +451,26 @@ document.addEventListener("DOMContentLoaded", () => {
             cameraClient.stopPreview();
             isPreviewing = false;
             cameraPreviewBtn.textContent = 'Preview';
-            hideAllPreviews();
-            cameraPlaceholder.style.display = 'flex';
+            setPlaceholder('No feed');
             return;
         }
-        try {
-            cameraPlaceholder.style.display = 'none';
-            const target = cameraPreviewTarget();
-            hideAllPreviews();
-            target.style.display = 'block';
-            await cameraClient.startPreview(target, 5);
-            isPreviewing = true;
-            cameraPreviewBtn.textContent = 'Stop';
-            // 権限が付与されるとデバイスラベルが取れるようになるのでリスト更新
-            refreshCameraDeviceSelect();
-        } catch (e) {
-            hideAllPreviews();
-            cameraPlaceholder.style.display = 'flex';
-            addMessage("system", "カメラのプレビュー開始に失敗: " + e.message);
+        if (cameraClient instanceof UsbCameraClient) {
+            await startUsbPreview();
+        } else {
+            try {
+                cameraPlaceholder.style.display = 'none';
+                const target = cameraPreviewTarget();
+                hideAllPreviews();
+                target.style.display = 'block';
+                await cameraClient.startPreview(target, 5);
+                isPreviewing = true;
+                cameraPreviewBtn.textContent = 'Stop';
+            } catch (e) {
+                setPlaceholder('カメラのプレビュー開始に失敗: ' + e.message, {
+                    label: '再試行',
+                    onClick: () => cameraPreviewBtn.click()
+                });
+            }
         }
     });
 
