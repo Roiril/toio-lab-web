@@ -6,6 +6,30 @@ class ToolExecutor {
         this.toio = toioInstance;
         this.env = environment;
         this.memory = sessionMemory;
+
+        // 無期限ライト命令 (set_light duration=0 / set_light_pattern repetitions=0) は
+        // 一定時間で自動消灯。新しいライト命令で都度リセットする。
+        this._lightAutoOffTimer = null;
+        this._lightAutoOffDelayMs = 8000;
+    }
+
+    _cancelLightAutoOff() {
+        if (this._lightAutoOffTimer) {
+            clearTimeout(this._lightAutoOffTimer);
+            this._lightAutoOffTimer = null;
+        }
+    }
+
+    _scheduleLightAutoOff() {
+        this._cancelLightAutoOff();
+        this._lightAutoOffTimer = setTimeout(() => {
+            this._lightAutoOffTimer = null;
+            if (this.toio.clearLight) {
+                this.toio.clearLight().catch(e => console.warn('[ToolExecutor] auto-off failed:', e));
+            } else {
+                this.toio.setLight(0, 0, 0, 0).catch(e => console.warn('[ToolExecutor] auto-off failed:', e));
+            }
+        }, this._lightAutoOffDelayMs);
     }
 
     async _retryOnce(operationFn, desc) {
@@ -152,7 +176,12 @@ class ToolExecutor {
                 }
 
                 case "set_light": {
-                    await this._retryOnce(() => this.toio.setLight(args.red, args.green, args.blue, args.duration_ms || 0), "set_light");
+                    const dur = args.duration_ms || 0;
+                    this._cancelLightAutoOff();
+                    await this._retryOnce(() => this.toio.setLight(args.red, args.green, args.blue, dur), "set_light");
+                    // 0 = 明示的な持続点灯 → 一定時間で自動消灯（消灯指示自体は除外）
+                    const isOff = (args.red === 0 && args.green === 0 && args.blue === 0);
+                    if (dur === 0 && !isOff) this._scheduleLightAutoOff();
                     resultData = { status: "success", color: `rgb(${args.red},${args.green},${args.blue})` };
                     break;
                 }
@@ -176,8 +205,17 @@ class ToolExecutor {
 
                 case "set_light_pattern": {
                     if (this.toio.setLightPattern) {
-                        await this._retryOnce(() => this.toio.setLightPattern(args.frames, args.repetitions ?? 1), "set_light_pattern");
-                        resultData = { status: "success", desc: `Played light pattern with ${args.frames.length} frames (${args.repetitions} reps)` };
+                        const reps = args.repetitions ?? 1;
+                        this._cancelLightAutoOff();
+                        // reps=0 は無限ループ。await すると返ってこないので即時 fire-and-forget。
+                        if (reps === 0) {
+                            this.toio.setLightPattern(args.frames, 0).catch(e => console.warn('[set_light_pattern]', e));
+                        } else {
+                            await this._retryOnce(() => this.toio.setLightPattern(args.frames, reps), "set_light_pattern");
+                        }
+                        // 無限ループも有限ループも、命令完了後は一定時間で自動消灯
+                        this._scheduleLightAutoOff();
+                        resultData = { status: "success", desc: `Played light pattern with ${args.frames.length} frames (${reps} reps)` };
                     } else {
                         resultData = { status: "error", error: "set_light_pattern not supported by current interface" };
                     }
@@ -221,14 +259,37 @@ class ToolExecutor {
                 }
 
                 case "turn": {
+                    // toio の moveTo は最終角度しか取れず「最短回転」になるため、
+                    // 180° 超や 360° は単発では回らない（同一目標角度になる）。
+                    // 170° 以下のステップに分割し、各ステップを最短回転で繋ぐ。
                     const snap = this.env.getSnapshot();
                     const deg = args.degrees || 0;
-                    const target = ((snap.cube.angle + deg) % 360 + 360) % 360;
-                    resultData = await this._performMoveTo(
-                        snap.cube.x, snap.cube.y, target,
-                        { degrees: deg, from_angle: snap.cube.angle },
-                        "turn"
-                    );
+                    const fromAngle = snap.cube.angle;
+
+                    if (deg === 0) {
+                        resultData = { status: "success", desc: "turn 0° (no-op)" };
+                        break;
+                    }
+
+                    const MAX_STEP = 170;
+                    const totalAbs = Math.abs(deg);
+                    const steps = Math.max(1, Math.ceil(totalAbs / MAX_STEP));
+                    const sign = deg > 0 ? 1 : -1;
+                    const stepDeg = (totalAbs / steps) * sign;
+
+                    let curAngle = fromAngle;
+                    let lastResult = null;
+                    for (let i = 0; i < steps; i++) {
+                        const targetAngle = ((curAngle + stepDeg) % 360 + 360) % 360;
+                        lastResult = await this._performMoveTo(
+                            snap.cube.x, snap.cube.y, targetAngle,
+                            { degrees: deg, from_angle: fromAngle, step: i + 1, of: steps },
+                            steps > 1 ? `turn step ${i+1}/${steps}` : "turn"
+                        );
+                        curAngle = targetAngle;
+                        if (lastResult?.movement && !lastResult.movement.reached) break;
+                    }
+                    resultData = lastResult;
                     break;
                 }
 

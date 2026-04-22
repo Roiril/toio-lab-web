@@ -165,6 +165,8 @@ class ToioSim {
 
 
     async setLight(r, g, b, durationMs = 0) {
+        // 公開 API は走行中パターンを上書きする意図とみなしてキャンセル
+        this._cancelLightPattern && this._cancelLightPattern();
         if (this._lightTimeoutId) {
             clearTimeout(this._lightTimeoutId);
             this._lightTimeoutId = null;
@@ -211,32 +213,50 @@ class ToioSim {
 
     async setLightPattern(frames, repetitions = 1) {
         if (!frames || frames.length === 0) return;
-        if (this._lightTimeoutId) {
-            clearTimeout(this._lightTimeoutId);
-            this._lightTimeoutId = null;
-        }
-        if (this.cubeElement) {
-            const r = frames[0].red || 0;
-            const g = frames[0].green || 0;
-            const b = frames[0].blue || 0;
-            const color = `rgb(${r}, ${g}, ${b})`;
+        this._cancelLightPattern();
+
+        const token = { cancelled: false };
+        this._lightPatternToken = token;
+
+        const showFrame = (f) => {
+            if (!this.cubeElement) return;
+            const color = `rgb(${f.red || 0}, ${f.green || 0}, ${f.blue || 0})`;
             this.cubeElement.style.borderTop = `4px solid ${color}`;
             this.cubeElement.style.boxShadow = `0 0 10px ${color}`;
+        };
+
+        const runOnce = async () => {
+            for (const f of frames) {
+                if (token.cancelled) return;
+                showFrame(f);
+                await new Promise(r => setTimeout(r, f.duration_ms || 100));
+            }
+        };
+
+        if (repetitions === 0) {
+            (async () => {
+                while (!token.cancelled) await runOnce();
+            })();
+            return;
         }
-        // repetitions=0 は無限ループ: 点灯しっぱなしで即 resolve
-        if (repetitions === 0) return Promise.resolve();
-        const singleDur = frames.reduce((sum, f) => sum + (f.duration_ms || 100), 0);
-        const totalDuration = singleDur * repetitions;
-        return new Promise(resolve => {
-            this._lightTimeoutId = setTimeout(() => {
-                if (this.cubeElement) {
-                    this.cubeElement.style.borderTop = "none";
-                    this.cubeElement.style.boxShadow = "none";
-                }
-                this._lightTimeoutId = null;
-                resolve();
-            }, totalDuration);
-        });
+
+        for (let i = 0; i < repetitions; i++) {
+            if (token.cancelled) break;
+            await runOnce();
+        }
+        if (this._lightPatternToken === token) this._lightPatternToken = null;
+    }
+
+    _cancelLightPattern() {
+        if (this._lightPatternToken) {
+            this._lightPatternToken.cancelled = true;
+            this._lightPatternToken = null;
+        }
+    }
+
+    async clearLight() {
+        this._cancelLightPattern();
+        return this.setLight(0, 0, 0, 0);
     }
 
     async getBattery() {

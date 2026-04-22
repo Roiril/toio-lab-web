@@ -47,6 +47,9 @@ class ToioBLE {
         this._positionDeadbandMm = 3;
         this._angleDeadbandDeg = 2;
 
+        // JS-driven light pattern animation token
+        this._lightPatternToken = null;
+
         // Bound handlers — stored so addEventListener/removeEventListener are symmetric
         this._boundHandleIdUpdate = this._handleIdUpdate.bind(this);
         this._boundHandleMotorUpdate = this._handleMotorUpdate.bind(this);
@@ -278,6 +281,12 @@ class ToioBLE {
         this._lastReportedX = 0;
         this._lastReportedY = 0;
         this._lastReportedAngle = 0;
+
+        // Stop any running light animation
+        if (this._lightPatternToken) {
+            this._lightPatternToken.cancelled = true;
+            this._lightPatternToken = null;
+        }
     }
 
     // --- Private Handlers ---
@@ -534,6 +543,16 @@ class ToioBLE {
      * @param {number} durationMs
      */
     async setLight(r, g, b, durationMs = 0) {
+        // 公開 API は走行中パターンを上書きする意図とみなしてキャンセルする
+        this._cancelLightPattern();
+        return this._writeLight(r, g, b, durationMs);
+    }
+
+    /**
+     * LED に書き込むだけの内部メソッド。パターンループはこちらを使うことで
+     * 自分自身をキャンセルしないようにする。
+     */
+    async _writeLight(r, g, b, durationMs = 0) {
         if (!this.isConnected) return;
 
         return new Promise((resolve) => {
@@ -553,62 +572,61 @@ class ToioBLE {
         });
     }
 
+    /**
+     * JS-driven light animation.
+     * toio の 0x04 (Repeat Operations) コマンドは仕様上 1 回の write が 20 バイト上限のため、
+     * 3 フレーム以上 (3 + N*6) は cube に投げると silently drop される。
+     * ここでは setLight を順次呼び出してフレームを再現する。
+     *
+     * @param {Array} frames - [{red, green, blue, duration_ms}, ...]
+     * @param {number} repetitions - 0 = 無限ループ。次の light 系コマンドで停止。
+     */
     async setLightPattern(frames, repetitions = 1) {
         if (!this.isConnected || !frames || frames.length === 0) return;
 
-        const BLE_MAX_FRAMES = 8;
-        let reps = Math.min(255, repetitions);
-        let frameIdx = 0;
-        let totalDurationMs = 0;
+        // 既存パターンをキャンセル
+        this._cancelLightPattern();
 
-        return new Promise((resolve) => {
-            const sendNextBatch = () => {
-                if (frameIdx >= frames.length) {
-                    if (reps > 0) {
-                        const singleDur = frames.reduce((sum, f) => sum + (f.duration_ms || 100), 0);
-                        setTimeout(resolve, singleDur * reps);
-                    } else {
-                        resolve();
-                    }
-                    return Promise.resolve();
+        const token = { cancelled: false };
+        this._lightPatternToken = token;
+
+        const runOnce = async () => {
+            for (const f of frames) {
+                if (token.cancelled || !this.isConnected) return;
+                await this._writeLight(f.red || 0, f.green || 0, f.blue || 0, 0);
+                await new Promise(r => setTimeout(r, f.duration_ms || 100));
+            }
+        };
+
+        if (repetitions === 0) {
+            // 無限ループ: バックグラウンド再生で即 resolve
+            (async () => {
+                while (!token.cancelled && this.isConnected) {
+                    await runOnce();
                 }
+            })().catch(e => console.warn('[toio] light pattern loop error:', e));
+            return;
+        }
 
-                const batchSize = Math.min(BLE_MAX_FRAMES, frames.length - frameIdx);
-                let buf = new Uint8Array(3 + batchSize * 6);
-                buf[0] = 0x04;
-                buf[1] = reps;
-                buf[2] = batchSize;
+        const reps = Math.min(255, repetitions);
+        for (let i = 0; i < reps; i++) {
+            if (token.cancelled) break;
+            await runOnce();
+        }
+        if (this._lightPatternToken === token) this._lightPatternToken = null;
+    }
 
-                for (let i = 0; i < batchSize; i++) {
-                    const f = frames[frameIdx + i];
-                    let durMs = f.duration_ms || 100;
-                    let dur10ms = Math.max(1, Math.min(255, Math.floor(durMs / 10)));
-                    totalDurationMs += durMs;
+    _cancelLightPattern() {
+        if (this._lightPatternToken) {
+            this._lightPatternToken.cancelled = true;
+            this._lightPatternToken = null;
+        }
+    }
 
-                    let offset = 3 + i * 6;
-                    buf[offset] = dur10ms;
-                    buf[offset+1] = 0x01;
-                    buf[offset+2] = 0x01;
-                    buf[offset+3] = f.red || 0;
-                    buf[offset+4] = f.green || 0;
-                    buf[offset+5] = f.blue || 0;
-                }
-
-                frameIdx += batchSize;
-                return this.characteristics.light.writeValueWithoutResponse(buf);
-            };
-
-            this._enqueueWrite(() => {
-                const recursiveSend = () => {
-                    return sendNextBatch().then(() => {
-                        if (frameIdx < frames.length) {
-                            return recursiveSend();
-                        }
-                    });
-                };
-                return recursiveSend();
-            }).catch(() => resolve());
-        });
+    /** Cancel any running pattern and turn the LED off. */
+    async clearLight() {
+        this._cancelLightPattern();
+        return this._writeLight(0, 0, 0, 0);
     }
 
     // --- Sound Control ---

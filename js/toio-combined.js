@@ -62,6 +62,15 @@ class ToioCombined {
         ]);
     }
 
+    async clearLight() {
+        await Promise.all([
+            this.sim.clearLight ? this.sim.clearLight() : this.sim.setLight(0, 0, 0, 0),
+            this.ble.isConnected && this.ble.clearLight
+                ? this._bleSafe(this.ble.clearLight(), 'clearLight')
+                : Promise.resolve()
+        ]);
+    }
+
     async setLightPattern(frames, repetitions) {
         await Promise.all([
             this.sim.setLightPattern(frames, repetitions),
