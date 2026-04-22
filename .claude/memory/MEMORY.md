@@ -5,3 +5,4 @@
 - [feedback_response_style.md](feedback_response_style.md) - 端的・論理的・最低限の応答
 - [user_name_rafael.md](user_name_rafael.md) - このClaude Codeの名前はラファエル（アプリ内LLMとの区別用）
 - [project_agent_name_tom.md](project_agent_name_tom.md) - アプリ内LLM（Ollama/Gemini）の名前はトム
+- [design_guidelines.md](design_guidelines.md) - UI/CSS 変更前に .agent/rules/design.md を必読（VSCode 風フラット設計）

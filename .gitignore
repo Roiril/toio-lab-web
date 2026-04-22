@@ -39,3 +39,6 @@ js/config.js
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 
+# Playwright MCP 検証成果物
+.playwright-mcp/
+

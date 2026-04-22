@@ -10,10 +10,6 @@
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <!-- Background Elements -->
-    <div class="bg-shape shape-1"></div>
-    <div class="bg-shape shape-2"></div>
-
     <div class="app-container">
         <!-- Header -->
         <header class="glass-panel">
@@ -122,9 +118,9 @@
             <h2>設定</h2>
             <div class="form-group">
                 <label for="llm-provider">LLM Provider</label>
-                <select id="llm-provider" style="width: 100%; padding: 0.5rem; border-radius: 4px; border: 1px solid #ccc; background: transparent; color: inherit; font-family: inherit;">
-                    <option value="ollama" style="color: #000;">Local Ollama</option>
-                    <option value="gemini" style="color: #000;">Google AI Studio (Gemini)</option>
+                <select id="llm-provider">
+                    <option value="ollama">Local Ollama</option>
+                    <option value="gemini">Google AI Studio (Gemini)</option>
                 </select>
             </div>
             
@@ -156,7 +152,7 @@
             <div class="form-group">
                 <label for="camera-url-input">Camera URL (ESP32S3)</label>
                 <input type="text" id="camera-url-input" placeholder="http://192.168.x.x">
-                <small style="color: var(--text-secondary); font-size: 12px;">シリアルモニターに表示されるIPアドレスを入力</small>
+                <small style="color: var(--text-muted); font-size: 11px;">シリアルモニターに表示されるIPアドレスを入力</small>
             </div>
             <div class="form-group">
                 <button id="clear-memory-btn" class="secondary-btn" style="width: 100%;">セッション記憶をクリア</button>
