@@ -2,41 +2,17 @@
   "permissions": {
     "defaultMode": "bypassPermissions",
     "allow": [
-      "Bash(node \"c:/Users/kouga/Projects/Web/toio-lab-web/.claude/hooks/session-start.js\")",
-      "Bash(node \"c:/Users/kouga/Projects/Web/toio-lab-web/.claude/hooks/pre-tool-use-guard.js\")",
-      "Bash(node \"c:/Users/kouga/Projects/Web/toio-lab-web/scripts/post-edit-hook.js\")"
+      "Bash(node \"c:/Users/kouga/Projects/Web/toio-lab-web/.claude/hooks/pre-tool-use-guard.js\")"
     ]
   },
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"c:/Users/kouga/Projects/Web/toio-lab-web/.claude/hooks/session-start.js\""
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
-        "matcher": "Bash|Write|Edit|NotebookEdit",
+        "matcher": "Write|Edit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
             "command": "node \"c:/Users/kouga/Projects/Web/toio-lab-web/.claude/hooks/pre-tool-use-guard.js\""
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"c:/Users/kouga/Projects/Web/toio-lab-web/scripts/post-edit-hook.js\""
           }
         ]
       }

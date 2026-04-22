@@ -68,9 +68,10 @@ UI / LLM / ツール呼び出しに関わる変更後は、以下を自律的に
 ## Claude Code ハーネス (.claude/)
 
 - **[memory/](.claude/memory/)** — 自動メモリ（`MEMORY.md` がインデックス、topic ごとに分割）
-- **[commands/](.claude/commands/)** — カスタムスラッシュコマンド（`/commit`, `/plan` 等）
-- **[hooks/](.claude/hooks/)** — SessionStart（git 状態注入）/ PreToolUse（不可逆操作ガード）/ PostToolUse（Windows エンコーディング修正）
-- **[settings.json](.claude/settings.json)** — 権限・hook 設定
+- **[hooks/](.claude/hooks/)** — プロジェクト固有 PreToolUse（`js/config.js` 編集ガード）
+- **[settings.json](.claude/settings.json)** — プロジェクト固有の権限・hook のみ
+
+汎用 hook（SessionStart 状態注入 / 不可逆操作ガード / Windows エンコーディング修正）とスラッシュコマンド（`/commit`, `/plan`）は `~/.claude/` にグローバル配置済み。
 
 ## 共有ハーネス (.agent/)
 

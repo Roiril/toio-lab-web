@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-// PreToolUse guard: under bypassPermissions, still prompt before irreversible
-// or sensitive operations (per ~/.claude/CLAUDE.md exception list).
+// Project-specific PreToolUse guard: toio-lab-web 固有チェックのみ。
+// 汎用的な不可逆操作ガードはグローバル ~/.claude/hooks/pre-tool-use-guard.js
+// 側で行われる。両方が登録されていれば両方走る。
 let buf = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', d => (buf += d));
@@ -11,18 +12,8 @@ process.stdin.on('end', () => {
     const input = j.tool_input || {};
     const reasons = [];
 
-    if (tool === 'Bash') {
-      const cmd = String(input.command || '');
-      if (/\bgit\s+push\b[^\n]*--force(?!-with-lease)/.test(cmd)) reasons.push('git push --force');
-      if (/\bgit\s+reset\s+--hard\b/.test(cmd)) reasons.push('git reset --hard');
-      if (/\bgit\s+branch\s+-D\b/.test(cmd)) reasons.push('git branch -D');
-      if (/\brm\s+-rf?\s+[\/~]/.test(cmd)) reasons.push('rm -rf on root/home');
-      if (/\bnpm\s+(uninstall|remove|rm)\b/.test(cmd)) reasons.push('npm uninstall (依存削除)');
-    }
-
     if (tool === 'Write' || tool === 'Edit' || tool === 'NotebookEdit') {
       const fp = String(input.file_path || '');
-      if (/(^|[\\/])\.env(\.|$)/i.test(fp)) reasons.push('.env 直接編集');
       if (/js[\\/]config\.js$/i.test(fp)) reasons.push('js/config.js 手動編集（start-app.bat が自動生成）');
     }
 

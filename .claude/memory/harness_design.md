@@ -25,16 +25,26 @@ Claude Code をメインエージェントとして運用する。記憶は自�
 
 **Why:** ユーザーがグローバルで `bypassPermissions` を選択。`.agent/rules/global.md` の「承認を得ること」は他エージェント向け規約なので、グローバル CLAUDE.md で上書き宣言してある。
 
-## Hooks (本プロジェクト)
+## Hooks
+
+汎用ガードは `~/.claude/hooks/` にグローバル配置し、`~/.claude/settings.json` で全プロジェクト共通に登録済み（2026-04-22 移行）。
+
+### グローバル (`~/.claude/hooks/`)
 
 | イベント | スクリプト | 役割 |
 |---|---|---|
-| `SessionStart` | `.claude/hooks/session-start.js` | 直近コミット / 未コミット差分 / 進行中 plan を stdout → コンテキスト注入 |
-| `PreToolUse` (Bash\|Write\|Edit\|NotebookEdit) | `.claude/hooks/pre-tool-use-guard.js` | `bypassPermissions` 下でも `git push --force` / `git reset --hard` / `rm -rf /~` / `.env` 編集 / `js/config.js` 編集 / `npm uninstall` に対して `permissionDecision: ask` を返す安全弁 |
-| `PostToolUse` (Write\|Edit) | `scripts/post-edit-hook.js` | `.ps1` に UTF-8 BOM、`.bat` に Shift-JIS を自動付与（CLAUDE.md Windows エンコーディング規約の自動化） |
+| `SessionStart` | `session-start.js` | 直近コミット / 未コミット差分 / 進行中 plan (`.agent/plans/`) を stdout → コンテキスト注入 |
+| `PreToolUse` (Bash\|Write\|Edit\|NotebookEdit) | `pre-tool-use-guard.js` | `git push --force` / `git reset --hard` / `git branch -D` / `rm -rf /~` / `.env` 編集 / `npm/yarn/pnpm/pip uninstall` に `permissionDecision: ask` を返す安全弁 |
+| `PostToolUse` (Write\|Edit) | `post-edit-hook.js` → `encode-after-edit.ps1` | `.ps1` に UTF-8 BOM、`.bat` に Shift-JIS を自動付与 |
 
-**Why:** VSCode 拡張経由でも hooks は有効。`bypassPermissions` 全開の保険として PreToolUse ガードを入れ、SessionStart で前回セッションの続きを毎回手動確認せずに済む構成にした（Anthropic「Effective Harnesses for Long-Running Agents」より）。
-**How to apply:** フック追加は `.claude/settings.json` の `hooks` に登録。hooks スクリプトは `.claude/hooks/` 配下に置く規約（既存 `scripts/post-edit-hook.js` は汎用性のため `scripts/` のまま）。
+### プロジェクト (`.claude/hooks/`)
+
+| イベント | スクリプト | 役割 |
+|---|---|---|
+| `PreToolUse` (Write\|Edit\|NotebookEdit) | `pre-tool-use-guard.js` | toio-lab-web 固有：`js/config.js` 手動編集を `ask` に降格（`start-app.bat` が自動生成） |
+
+**Why:** `bypassPermissions` 全開の保険としてグローバル PreToolUse ガードを入れ、SessionStart で前回セッションの続きを毎回手動確認せずに済む構成（Anthropic「Effective Harnesses for Long-Running Agents」より）。共通分をグローバル化することで新規プロジェクトでも同じ運用が即座に立ち上がる。
+**How to apply:** 新しいプロジェクト固有ガードは `.claude/hooks/` と `.claude/settings.json` に追加。グローバル側と並行実行される。
 
 ## 計画ファイル
 
