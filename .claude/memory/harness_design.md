@@ -27,7 +27,14 @@ Claude Code をメインエージェントとして運用する。記憶は自�
 
 ## Hooks (本プロジェクト)
 
-`PostToolUse` (Write|Edit) で `scripts/post-edit-hook.js` → `.ps1` に UTF-8 BOM、`.bat` に Shift-JIS を自動付与。CLAUDE.md ルール 9（Windows エンコーディング）の自動化。
+| イベント | スクリプト | 役割 |
+|---|---|---|
+| `SessionStart` | `.claude/hooks/session-start.js` | 直近コミット / 未コミット差分 / 進行中 plan を stdout → コンテキスト注入 |
+| `PreToolUse` (Bash\|Write\|Edit\|NotebookEdit) | `.claude/hooks/pre-tool-use-guard.js` | `bypassPermissions` 下でも `git push --force` / `git reset --hard` / `rm -rf /~` / `.env` 編集 / `js/config.js` 編集 / `npm uninstall` に対して `permissionDecision: ask` を返す安全弁 |
+| `PostToolUse` (Write\|Edit) | `scripts/post-edit-hook.js` | `.ps1` に UTF-8 BOM、`.bat` に Shift-JIS を自動付与（CLAUDE.md Windows エンコーディング規約の自動化） |
+
+**Why:** VSCode 拡張経由でも hooks は有効。`bypassPermissions` 全開の保険として PreToolUse ガードを入れ、SessionStart で前回セッションの続きを毎回手動確認せずに済む構成にした（Anthropic「Effective Harnesses for Long-Running Agents」より）。
+**How to apply:** フック追加は `.claude/settings.json` の `hooks` に登録。hooks スクリプトは `.claude/hooks/` 配下に置く規約（既存 `scripts/post-edit-hook.js` は汎用性のため `scripts/` のまま）。
 
 ## 計画ファイル
 
