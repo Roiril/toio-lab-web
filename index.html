@@ -45,9 +45,10 @@
                         </div>
                     </div>
                     <div class="btn-group">
-                        <button id="connect-toio-btn" class="primary-btn">Connect Cube</button>
+                        <button id="connect-toio-btn" class="secondary-btn">Connect Cube</button>
                         <button id="disconnect-toio-btn" class="secondary-btn" disabled>Disconnect</button>
                     </div>
+                    <small class="hint">任意: 未接続でもシミュレータで動作確認できます。</small>
                 </section>
 
                 <section class="control-section simulation-container">
@@ -56,6 +57,7 @@
                         <div id="sim-cube" class="sim-cube">toio</div>
                         <div id="ghost-cube" class="sim-cube ghost" style="display: none;">REAL</div>
                     </div>
+                    <div class="sim-readout" id="sim-readout">(—, —) · —°</div>
                 </section>
 
                 <section class="control-section">
@@ -78,11 +80,20 @@
             <!-- Chat Area -->
             <main class="chat-area glass-panel">
                 <div class="chat-history" id="chat-history">
-                    <div class="message system">
+                    <div class="message system welcome">
                         <div class="message-content">
-                            toio Lab - Agent Loop<br>
-                            「前に少し進んで」「青色に光らせて」などの言葉で操作できます。<br>
-                            実機を使う場合は左のパネルから接続してください。
+                            <div class="welcome-title">toio Lab — 自然言語で動かす</div>
+                            <div class="welcome-body">
+                                下のチップを押すか、話しかけてください。実機がなくてもシミュレータで動きます。
+                            </div>
+                            <div class="quick-starts" id="quick-starts">
+                                <button class="chip" data-prompt="前にちょっと進んで">前にちょっと進んで</button>
+                                <button class="chip" data-prompt="右に動いて">右に動いて</button>
+                                <button class="chip" data-prompt="中央に行って">中央に行って</button>
+                                <button class="chip" data-prompt="くるっと一回転して">くるっと一回転</button>
+                                <button class="chip" data-prompt="赤く光って">赤く光って</button>
+                                <button class="chip" data-prompt="きらきら光りながらスピンして">きらきらスピン</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -154,6 +165,13 @@
                 <input type="text" id="camera-url-input" placeholder="http://192.168.x.x">
                 <small style="color: var(--text-muted); font-size: 11px;">シリアルモニターに表示されるIPアドレスを入力</small>
             </div>
+            <div class="form-group">
+                <label>校正辞書（ユーザー語彙の記憶）</label>
+                <div id="calibration-list" class="calibration-list">
+                    <div class="calibration-empty">（まだ記憶はありません）</div>
+                </div>
+            </div>
+
             <div class="form-group">
                 <button id="clear-memory-btn" class="secondary-btn" style="width: 100%;">セッション記憶をクリア</button>
             </div>

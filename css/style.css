@@ -636,6 +636,194 @@ button:disabled {
     opacity: 0.85;
 }
 
+/* ---- Welcome + quick-start chips ---- */
+.message.system.welcome .message-content {
+    border-left: 2px solid var(--accent);
+    font-family: var(--font-main);
+    padding: 10px 14px;
+}
+.welcome-title {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+    margin-bottom: 4px;
+    text-transform: none;
+    letter-spacing: 0;
+}
+.welcome-body {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+}
+.quick-starts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.chip {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    font-size: 12px;
+    font-family: var(--font-main);
+    cursor: pointer;
+    border-radius: 12px;
+    transition: background-color 0.1s ease, border-color 0.1s ease;
+}
+.chip:hover:not(:disabled) {
+    background: var(--bg-input);
+    border-color: var(--accent);
+    color: var(--text);
+}
+.chip:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ---- Sim readout ---- */
+.sim-readout {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+    letter-spacing: 0.5px;
+}
+
+/* ---- Hint text ---- */
+.hint {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+    line-height: 1.4;
+}
+
+/* ---- Action card (one tool_call step) ---- */
+.action-card {
+    align-self: stretch;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 12px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--border-strong);
+    font-size: 12px;
+    color: var(--text);
+    animation: fadeIn 0.15s ease-out forwards;
+}
+.action-card.running {
+    border-left-color: var(--accent);
+}
+.action-card.done {
+    border-left-color: var(--ok);
+}
+.action-card.warn {
+    border-left-color: var(--danger);
+}
+
+.action-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0;
+}
+.action-icon {
+    width: 14px;
+    flex-shrink: 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 11px;
+}
+.action-card.running .action-icon { color: var(--accent); }
+.action-card.done    .action-icon { color: var(--ok); }
+.action-card.warn    .action-icon { color: var(--danger); }
+.action-label {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text);
+}
+.action-detail-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 10px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 0;
+    font-family: var(--font-mono);
+}
+.action-detail-toggle:hover { color: var(--text); }
+.action-detail {
+    display: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    margin-top: 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.action-detail.open { display: block; }
+.action-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    padding-left: 22px;
+    line-height: 1.4;
+}
+
+/* ---- Calibration list in settings ---- */
+.calibration-list {
+    border: 1px solid var(--border);
+    max-height: 160px;
+    overflow-y: auto;
+    background: var(--bg-input);
+}
+.calibration-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+}
+.calibration-row:last-child { border-bottom: none; }
+.calibration-word {
+    font-weight: 600;
+    color: var(--text);
+    min-width: 80px;
+}
+.calibration-meaning {
+    flex: 1;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    word-break: break-all;
+}
+.calibration-remove {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px 6px;
+    font-size: 11px;
+}
+.calibration-remove:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+}
+.calibration-empty {
+    padding: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
 .step-header {
     font-size: 10px;
     color: var(--text-muted);

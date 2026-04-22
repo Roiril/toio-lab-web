@@ -65,6 +65,12 @@ class SessionMemory {
         return this.memory.calibrations || {};
     }
 
+    removeCalibration(word) {
+        if (!this.memory.calibrations) return;
+        delete this.memory.calibrations[word];
+        this._save();
+    }
+
     buildContextString() {
         const parts = [];
         const summary = this.getRecentSummary();
