@@ -34,6 +34,85 @@ class SpatialAwareness {
             80: 184,
             100: 230,
         };
+
+        // === エゴセントリックツール用プリセット ===
+        // 距離プリセット（mm）— small は歩幅より小さい、large はマット半分弱
+        this.distancePresets = {
+            small: 30,
+            medium: 70,
+            large: 130,
+        };
+    }
+
+    /**
+     * 名前付きランドマークの座標を返す。
+     * 「中央」「左上」などの曖昧指示を解決するためのレジストリ。
+     */
+    getLandmarkCoords(name) {
+        const m = this.mat.safeMargin;
+        const range = this.mat.coordRange;
+        const cx = Math.round((range.x.min + range.x.max) / 2);
+        const cy = Math.round((range.y.min + range.y.max) / 2);
+        const left   = range.x.min + m;
+        const right  = range.x.max - m;
+        const top    = range.y.min + m;
+        const bottom = range.y.max - m;
+
+        const table = {
+            "center":       { x: cx,    y: cy    },
+            "top":          { x: cx,    y: top   },
+            "bottom":       { x: cx,    y: bottom},
+            "left":         { x: left,  y: cy    },
+            "right":        { x: right, y: cy    },
+            "top-left":     { x: left,  y: top   },
+            "top-right":    { x: right, y: top   },
+            "bottom-left":  { x: left,  y: bottom},
+            "bottom-right": { x: right, y: bottom},
+        };
+        return table[name] || null;
+    }
+
+    /**
+     * 距離プリセット名 or 数値(mm) を座標単位に変換。
+     */
+    resolveDistance(distance) {
+        if (typeof distance === 'number') return this.mmToCoord(distance);
+        const mm = this.distancePresets[distance] ?? this.distancePresets.medium;
+        return this.mmToCoord(mm);
+    }
+
+    /**
+     * direction ("forward"/"backward"/"right"/"left"/"up"/"down") + 現在位置・角度から
+     * { target_x, target_y, target_angle } を計算する。
+     *   - forward/backward: cube の現在角度基準（egocentric）。最終角度は維持。
+     *   - right/left/up/down: マット絶対方向。最終角度は移動方向に合わせる。
+     */
+    resolveRelativeMove(direction, distanceUnits, cubeX, cubeY, cubeAngle) {
+        const rad = (cubeAngle * Math.PI) / 180;
+        let dx = 0, dy = 0, targetAngle = cubeAngle;
+
+        switch (direction) {
+            case "forward":
+                dx = Math.cos(rad) * distanceUnits;
+                dy = Math.sin(rad) * distanceUnits;
+                break;
+            case "backward":
+                dx = -Math.cos(rad) * distanceUnits;
+                dy = -Math.sin(rad) * distanceUnits;
+                break;
+            case "right":  dx =  distanceUnits; targetAngle =   0; break;
+            case "left":   dx = -distanceUnits; targetAngle = 180; break;
+            case "up":     dy = -distanceUnits; targetAngle = 270; break;
+            case "down":   dy =  distanceUnits; targetAngle =  90; break;
+            default:
+                return null;
+        }
+
+        return {
+            target_x: Math.round(cubeX + dx),
+            target_y: Math.round(cubeY + dy),
+            target_angle: ((targetAngle % 360) + 360) % 360,
+        };
     }
 
     // キューブの現在位置からマット端までの余裕（座標単位）
@@ -147,32 +226,16 @@ class SpatialAwareness {
     getStaticGuide() {
         const m = this.mat.safeMargin;
         const range = this.mat.coordRange;
+        const p = this.distancePresets;
         return [
-            `## 空間情報（車両感覚）`,
-            `マット座標範囲: X(${range.x.min}〜${range.x.max}), Y(${range.y.min}〜${range.y.max})`,
-            `移動推奨範囲: X(${range.x.min + m}〜${range.x.max - m}), Y(${range.y.min + m}〜${range.y.max - m})`,
-            `※ Y座標がより小さい方が上（北）、より大きい方が下（南）を表します。`,
-            `※ センサーの読み取り安定のため、周辺${m}単位は「端」とみなし、移動指示は推奨範囲内で行ってください。`,
-            `キューブサイズ: 約 24 × 24 単位`,
+            `## マット座標系`,
+            `- X範囲 ${range.x.min}〜${range.x.max}（右=+X）、Y範囲 ${range.y.min}〜${range.y.max}（下=+Y, 上=-Y）`,
+            `- 角度: 0=右(+X), 90=下(+Y), 180=左, 270=上(-Y)`,
+            `- 端から${m}単位は安全マージン。移動先が外れても自動でクランプされる。`,
             ``,
-            `## 移動の目安（スピード=50のとき）`,
-            `- ちょっと動く: 300ms → 約 26 単位`,
-            `- 普通に進む: 700ms → 約 59 単位`,
-            `- 大きく進む: 1500ms → 約 126 単位`,
-            `- 端から端: 約 304 単位 (X方向) / 約 216 単位 (Y方向)`,
-            ``,
-            `## 回転の目安（スピード=50のとき）`,
-            `- 90度: 約280ms / 180度: 約560ms / 1回転: 約1120ms`,
-            `※ \`move_to\` で目的地の角度 (angle) を指定する場合も、この時間を参考に移動時間をイメージできます。`,
-            ``,
-            `## 推奨される操縦方法`,
-            `- 特定の場所へ行くには \`move_to(x, y, angle)\` を使用するのが最も確実です。`,
-            `- 向きだけを変えたい場合は \`turn\` または \`move_to\` で現在位置のまま角度だけを指定してください。`,
-            ``,
-            `## ⚠️ マット端の安全制御`,
-            `- \`move_to\` は自動的に安全範囲にクランプされます（端から${m}単位のマージン）。`,
-            `- \`move_forward\` / \`move_backward\` も端に衝突しそうな場合は自動的に距離が制限されます。`,
-            `- 端付近（余裕${m}単位以内）では短距離の移動を心がけてください。`
+            `## 距離プリセット`,
+            `- small=${p.small}mm / medium=${p.medium}mm / large=${p.large}mm`,
+            `- より細かく指定するときは distance に整数 (mm) を渡す。`
         ].join('\n');
     }
 

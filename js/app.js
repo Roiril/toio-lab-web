@@ -89,7 +89,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const sessionMemory = new SessionMemory();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
-    const executor = new ToolExecutor(combinedToio, environment);
+    const executor = new ToolExecutor(combinedToio, environment, sessionMemory);
     const cameraClient = new CameraClient(savedCameraUrl);
 
     // UI state
