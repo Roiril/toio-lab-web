@@ -86,32 +86,74 @@ h1 {
     flex: 1;
     gap: 0;
     min-height: 0;
+    height: calc(100vh - 36px);
 }
 
-/* Sidebar */
+/* Sidebar base (shared) */
 .sidebar {
-    width: 360px;
     display: flex;
     flex-direction: column;
     gap: 0;
     padding: 0;
-    overflow-y: auto;
+    overflow: hidden;       /* no sidebar scroll */
     border: none;
-    border-right: 1px solid var(--border);
     background: var(--bg-sidebar);
+    min-height: 0;
+}
+
+.sidebar-status {
+    width: 220px;
+    border-right: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.sidebar-visual {
+    width: 340px;
+    border-left: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+/* Visual sidebar: sim + camera share vertical space via flex */
+.sidebar-visual .control-section {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.sidebar-visual .simulation-mat,
+.sidebar-visual .camera-preview-box {
+    max-width: 100%;
+    max-height: 100%;
+    margin: 0 auto;
+}
+.sidebar-visual .simulation-mat {
+    width: 100%;
+    aspect-ratio: 304 / 216;
+}
+.sidebar-visual .camera-preview-box {
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    margin-top: 0;          /* override default 8px */
 }
 
 .control-section {
-    padding: 12px 16px;
+    padding: 10px 14px;
     border-bottom: 1px solid var(--border);
+}
+.sidebar-visual .control-section:last-child {
+    border-bottom: none;
+}
+.sidebar-status .control-section:last-child {
+    border-bottom: none;
 }
 
 .control-section h2 {
-    font-size: 11px;
+    font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 1px;
     color: var(--text-muted);
-    margin-bottom: 10px;
+    margin-bottom: 6px;
     font-weight: 600;
 }
 
@@ -120,8 +162,8 @@ h1 {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 10px;
-    font-size: 13px;
+    margin-bottom: 6px;
+    font-size: 12px;
     color: var(--text);
 }
 
@@ -141,12 +183,12 @@ h1 {
 }
 
 .cube-info {
-    font-size: 12px;
+    font-size: 11px;
     background: var(--bg-raised);
     border: 1px solid var(--border);
-    padding: 8px 10px;
+    padding: 4px 8px;
     border-radius: 0;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
 }
 
 .info-row {
@@ -179,6 +221,15 @@ button {
 .btn-group {
     display: flex;
     gap: 6px;
+}
+
+/* 狭い左カラム用：ボタンを縦に積む */
+.btn-group.btn-group-stacked {
+    flex-direction: column;
+}
+.btn-group.btn-group-stacked .primary-btn,
+.btn-group.btn-group-stacked .secondary-btn {
+    flex: none;
 }
 
 .primary-btn,
@@ -544,8 +595,7 @@ button:disabled {
 
 /* Simulation */
 .simulation-container {
-    margin-top: auto;
-    border-top: 1px solid var(--border);
+    /* right-sidebar 用: flex で共有されるので auto margin は付けない */
 }
 
 .simulation-mat {
@@ -897,7 +947,7 @@ button:disabled {
     border-radius: 0;
     overflow: hidden;
     position: relative;
-    margin-top: 8px;
+    margin-top: 0;
 }
 
 .camera-preview-img {

@@ -22,10 +22,10 @@
         </header>
 
         <div class="main-content">
-            <!-- Sidebar (Controls & Status) -->
-            <aside class="sidebar glass-panel">
+            <!-- Left: Status / Controls (narrow) -->
+            <aside class="sidebar sidebar-status glass-panel">
                 <section class="control-section">
-                    <h2>LLM Connection</h2>
+                    <h2>LLM</h2>
                     <div class="status-indicator">
                         <span id="llm-status-dot" class="dot disconnected"></span>
                         <span id="llm-status-text">Checking...</span>
@@ -33,31 +33,22 @@
                 </section>
 
                 <section class="control-section">
-                    <h2>toio Connection</h2>
+                    <h2>toio</h2>
                     <div class="status-indicator">
                         <span id="toio-status-dot" class="dot disconnected"></span>
                         <span id="toio-status-text">Disconnected</span>
                     </div>
-                    <div class="cube-info" id="cube-info" style="display: none;">
+                    <div class="cube-info" id="cube-info">
                         <div class="info-row">
                             <span>Battery</span>
                             <span id="battery-level">--%</span>
                         </div>
                     </div>
-                    <div class="btn-group">
+                    <div class="btn-group btn-group-stacked">
                         <button id="connect-toio-btn" class="secondary-btn">Connect Cube</button>
                         <button id="disconnect-toio-btn" class="secondary-btn" disabled>Disconnect</button>
                     </div>
-                    <small class="hint">任意: 未接続でもシミュレータで動作確認できます。</small>
-                </section>
-
-                <section class="control-section simulation-container">
-                    <h2>Simulation</h2>
-                    <div id="simulation-mat" class="simulation-mat">
-                        <div id="sim-cube" class="sim-cube">toio</div>
-                        <div id="ghost-cube" class="sim-cube ghost" style="display: none;">REAL</div>
-                    </div>
-                    <div class="sim-readout" id="sim-readout">(—, —) · —°</div>
+                    <small class="hint">未接続でもシミュレータで動作確認できます。</small>
                 </section>
 
                 <section class="control-section">
@@ -66,13 +57,8 @@
                         <span id="camera-status-dot" class="dot disconnected"></span>
                         <span id="camera-status-text">Disconnected</span>
                     </div>
-                    <div class="camera-preview-box">
-                        <img id="camera-preview-img" class="camera-preview-img" alt="Camera feed" style="display:none">
-                        <video id="camera-preview-video" class="camera-preview-img" autoplay muted playsinline style="display:none"></video>
-                        <div id="camera-placeholder" class="camera-placeholder">No feed</div>
-                    </div>
-                    <div class="btn-group" style="margin-top: 10px;">
-                        <button id="camera-connect-btn" class="primary-btn">Connect</button>
+                    <div class="btn-group btn-group-stacked">
+                        <button id="camera-connect-btn" class="secondary-btn">Connect</button>
                         <button id="camera-preview-btn" class="secondary-btn" disabled>Preview</button>
                     </div>
                     <select id="camera-device-select" class="camera-device-select" style="display:none; margin-top:8px;"></select>
@@ -122,6 +108,27 @@
                     </div>
                 </div>
             </main>
+
+            <!-- Right: Visual panels (simulation + camera preview) -->
+            <aside class="sidebar sidebar-visual glass-panel">
+                <section class="control-section simulation-container">
+                    <h2>Simulation</h2>
+                    <div id="simulation-mat" class="simulation-mat">
+                        <div id="sim-cube" class="sim-cube">toio</div>
+                        <div id="ghost-cube" class="sim-cube ghost" style="display: none;">REAL</div>
+                    </div>
+                    <div class="sim-readout" id="sim-readout">(—, —) · —°</div>
+                </section>
+
+                <section class="control-section">
+                    <h2>Camera Feed</h2>
+                    <div class="camera-preview-box">
+                        <img id="camera-preview-img" class="camera-preview-img" alt="Camera feed" style="display:none">
+                        <video id="camera-preview-video" class="camera-preview-img" autoplay muted playsinline style="display:none"></video>
+                        <div id="camera-placeholder" class="camera-placeholder">No feed</div>
+                    </div>
+                </section>
+            </aside>
         </div>
     </div>
 
