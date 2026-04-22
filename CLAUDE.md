@@ -41,6 +41,17 @@ node scripts/dev-server.js
 - **バッチ (.bat)**: ASCII のみ。日本語は PowerShell に委譲
 - **配列コアーション**: `@(...)` で配列型を強制
 
+## 自動テスト運用（ラファエル）
+
+UI / LLM / ツール呼び出しに関わる変更後は、以下を自律的に実行して検証する。
+
+1. **dev-server をバックグラウンド起動**: `node scripts/dev-server.js` を `run_in_background` で実行し、BashOutput でターミナルログを随時確認する
+2. **Playwright MCP でブラウザ検証**: `.mcp.json` 経由の `@playwright/mcp` で `http://localhost:3000` を開き、
+   - DOM 操作でシミュレータ経路（`toio-sim.js`）の動作を確認
+   - `console.*` / `pageerror` を収集し、エラー・警告がないことを検証
+3. **実機 BLE 経路は自動化不可**: Web Bluetooth のペアリングダイアログは Playwright を通せないため、BLE 接続が必要な検証は手動テストをユーザーに依頼する
+4. 完了報告時は「Playwright で検証済み / BLE 経路は未検証（手動確認お願いします）」を明示する
+
 ## 禁止事項
 
 - `.env` / `.env.local` を直接編集しない（ユーザーに確認を取る）
@@ -54,14 +65,29 @@ node scripts/dev-server.js
 - コード変更後の自己解説は不要（差分が真実）
 - 表・箇条書きを優先、散文は最小
 
+## Claude Code ハーネス (.claude/)
+
+- **[memory/](.claude/memory/)** — 自動メモリ（`MEMORY.md` がインデックス、topic ごとに分割）
+- **[commands/](.claude/commands/)** — カスタムスラッシュコマンド（`/commit`, `/plan` 等）
+- **[hooks/](.claude/hooks/)** — SessionStart（git 状態注入）/ PreToolUse（不可逆操作ガード）/ PostToolUse（Windows エンコーディング修正）
+- **[settings.json](.claude/settings.json)** — 権限・hook 設定
+
 ## 共有ハーネス (.agent/)
 
-Claude Code をメインで使用するため、本プロジェクトの記憶は **Claude Code 自動メモリ** (`~/.claude/projects/.../memory/`) に集約する。`.agent/` 配下は他エージェント (Cline / Roo Code) 用の参照資産として残す。
+`.agent/` 配下は他エージェント (Cline / Roo Code) 用の資産だが、**領域別ルールと計画は Claude Code からも参照する**。記憶は Claude Code 自動メモリ (`.claude/memory/`) に集約済み。
 
-- **ルール**: `.agent/rules/` — 他エージェント向け行動規約（Claude Code は読まない）
-- **ワークフロー**: `.agent/workflows/` — 実装 / git-push / self-improve（同上）
-- **計画**: `.agent/plans/` — 実装計画（`YYYY-MM-DD_<slug>.md`）。Claude Code も追記する
+### 領域別ルール（該当領域の作業前に読む）
+
+- [toio BLE](.agent/rules/toio-ble.md) — BLE 接続・コマンド送信のディレイ規約
+- [Ollama / Gemini LLM](.agent/rules/ollama-llm.md) — LLM 連携・ツール呼び出し
+- [UI / フロントエンド](.agent/rules/ui-frontend.md) — DOM・イベント・サニタイズ
+- [UI デザイン規約](.agent/rules/design.md) — カラー・角丸・アニメーション（CSS 変更前に必読）
+- [global](.agent/rules/global.md) — 他エージェント向け汎用規約（参考）
+
+### その他
+
+- **ワークフロー**: `.agent/workflows/` — 他エージェント用（Claude Code は `.claude/commands/` を使う）
+- **計画**: `.agent/plans/` — 実装計画（`YYYY-MM-DD_<slug>.md`）。`/plan <slug>` で作成
 - **タスク**: `.agent/tasks/` — チェックリスト
-- ~~**記憶**: `.agent/memory/`~~ — 撤去済み。今後は自動メモリへ
 
 動作モードはグローバル `~/.claude/CLAUDE.md` 参照（書き込み前承認なし、git コミット規約 等）。
