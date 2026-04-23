@@ -197,10 +197,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const scProgCount  = document.getElementById('sc-prog-count');
     const scProgBar    = document.getElementById('sc-prog-bar');
     const scProgList   = document.getElementById('sc-prog-list');
-    const scProgToggle = document.getElementById('sc-prog-toggle');
-    const scProgStop   = document.getElementById('sc-prog-stop');
+    const scProgToggle  = document.getElementById('sc-prog-toggle');
+    const scProgStop    = document.getElementById('sc-prog-stop');
+    const scProgDot     = document.getElementById('sc-prog-status-dot');
+    const scProgFooter  = document.getElementById('sc-prog-footer');
+    const scProgSummary = document.getElementById('sc-prog-summary');
+    const scProgBack    = document.getElementById('sc-prog-back');
+    const scProgRerun   = document.getElementById('sc-prog-rerun');
 
     let progListCollapsed = false;
+    let scenarioStartTime = 0;
 
     scProgToggle.addEventListener('click', () => {
         progListCollapsed = !progListCollapsed;
@@ -212,16 +218,41 @@ document.addEventListener("DOMContentLoaded", () => {
         if (scenarioRunner) scenarioRunner.stop();
     });
 
+    scProgBack.addEventListener('click', () => {
+        hideScenarioProgress();
+        switchMode('scenario');
+    });
+
+    scProgRerun.addEventListener('click', () => {
+        if (!scenarioRunner) return;
+        chatHistory.innerHTML = '';
+        scenarioRunner.reset();
+        scenarioStartTime = Date.now();
+        setChatProcessingState(true);
+        scenarioRunner.start().catch(e => {
+            console.error('scenario error:', e);
+            setChatProcessingState(false);
+        });
+    });
+
     function showScenarioProgress(runner) {
         scenarioProgressEl.style.display = '';
         progListCollapsed = false;
         scProgList.classList.remove('hidden');
         scProgToggle.classList.remove('collapsed');
+        scenarioStartTime = Date.now();
         updateScenarioProgress(runner);
     }
 
     function hideScenarioProgress() {
         scenarioProgressEl.style.display = 'none';
+    }
+
+    function formatElapsed(ms) {
+        const s = Math.floor(ms / 1000);
+        const mm = String(Math.floor(s / 60)).padStart(2, '0');
+        const ss = String(s % 60).padStart(2, '0');
+        return `${mm}:${ss}`;
     }
 
     function updateScenarioProgress(runner) {
@@ -232,18 +263,53 @@ document.addEventListener("DOMContentLoaded", () => {
         scProgCount.textContent = `${p.current} / ${p.total}`;
         scProgBar.style.width = pct + '%';
 
-        // 停止ボタンの表示制御
+        // ステータス: 進捗バー＋ドット色
+        scProgBar.classList.toggle('done', runner.status === 'done');
+        scProgBar.classList.toggle('error', runner.status === 'error');
+        scProgDot.className = 'sc-prog-status-dot status-' + runner.status;
+
+        // 停止ボタン表示制御
         scProgStop.style.display = runner.isRunning ? '' : 'none';
+
+        // 終了時 CTA
+        const terminal = runner.status === 'done' || runner.status === 'cancelled' || runner.status === 'error';
+        scProgFooter.style.display = terminal ? '' : 'none';
+        if (terminal) {
+            const elapsed = formatElapsed(Date.now() - scenarioStartTime);
+            const label = {
+                done:      `完了 · ${p.current}/${p.total} · ${elapsed}`,
+                cancelled: `キャンセル · ${p.current}/${p.total} · ${elapsed}`,
+                error:     `エラー · ${p.current}/${p.total} · ${elapsed}`,
+            }[runner.status];
+            scProgSummary.textContent = label || '';
+        }
 
         // チェックリスト描画
         scProgList.innerHTML = '';
         runner.steps.forEach(step => {
             const item = document.createElement('div');
             item.className = 'sc-prog-item ' + step.status;
-            item.textContent = step.text;
+
+            const icon = document.createElement('span');
+            icon.className = 'sc-prog-item-icon';
+            icon.setAttribute('aria-hidden', 'true');
+
+            const text = document.createElement('span');
+            text.className = 'sc-prog-item-text';
+            text.textContent = step.text;
+
+            item.appendChild(icon);
+            item.appendChild(text);
+
+            if (step.note && (step.status === 'active' || step.status === 'error')) {
+                const note = document.createElement('div');
+                note.className = 'sc-prog-item-note';
+                note.textContent = step.note;
+                item.appendChild(note);
+            }
+
             scProgList.appendChild(item);
 
-            // アクティブステップを自動スクロール
             if (step.status === 'active') {
                 setTimeout(() => item.scrollIntoView({ block: 'nearest' }), 0);
             }

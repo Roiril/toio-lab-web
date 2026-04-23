@@ -78,15 +78,21 @@
                 <!-- Scenario progress widget (visible while a scenario is running) -->
                 <div id="scenario-progress" class="scenario-progress" style="display:none">
                     <div class="sc-prog-header">
+                        <span class="sc-prog-status-dot" id="sc-prog-status-dot" aria-hidden="true"></span>
                         <span class="sc-prog-title" id="sc-prog-title"></span>
                         <span class="sc-prog-count" id="sc-prog-count"></span>
                         <button class="icon-btn sc-prog-toggle" id="sc-prog-toggle" title="チェックリストを折りたたむ">▾</button>
-                        <button class="secondary-btn sc-prog-stop" id="sc-prog-stop">停止</button>
+                        <button class="secondary-btn danger-btn sc-prog-stop" id="sc-prog-stop">停止</button>
                     </div>
                     <div class="sc-prog-bar-wrap">
                         <div class="sc-prog-bar" id="sc-prog-bar" style="width:0%"></div>
                     </div>
                     <div class="sc-prog-list" id="sc-prog-list"></div>
+                    <div class="sc-prog-footer" id="sc-prog-footer" style="display:none">
+                        <span class="sc-prog-summary" id="sc-prog-summary"></span>
+                        <button class="secondary-btn sc-prog-back" id="sc-prog-back">ライブラリへ戻る</button>
+                        <button class="primary-btn sc-prog-rerun" id="sc-prog-rerun">もう一度</button>
+                    </div>
                 </div>
 
                 <div class="chat-history" id="chat-history">

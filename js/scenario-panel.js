@@ -1,10 +1,12 @@
 /**
  * ScenarioPanel — シナリオモードの UI コンポーネント
  *
- * 3つのビュー:
- *   library  — シナリオ一覧
- *   editor   — 新規作成 / 編集
- *   runner   — 実行中チェックリスト
+ * 2つのビュー:
+ *   library — シナリオ一覧
+ *   editor  — 新規作成 / 編集
+ *
+ * 実行中の進捗は chat モードに切り替え、index.html の
+ * #scenario-progress ウィジェット（app.js が管理）で表示する。
  */
 class ScenarioPanel {
     constructor(el) {
@@ -15,8 +17,6 @@ class ScenarioPanel {
         this.onEdit = null;
         this.onDelete = null;
         this.onSave = null;
-        this.onStop = null;
-        this.onReset = null;
     }
 
     // ─── Library view ─────────────────────────────────────
@@ -106,10 +106,14 @@ class ScenarioPanel {
         const { meta, body } = this._splitContent(content);
         const initialSteps = this._parseSteps(body);
 
+        const crumbLeaf = isNew ? '新規' : '編集';
         this.el.innerHTML = `
             <div class="sc-toolbar">
-                <button class="icon-btn sc-back-btn" id="sc-back-btn" title="ライブラリに戻る (Esc)" aria-label="戻る">←</button>
-                <span class="sc-view-title">${isNew ? 'NEW SCENARIO' : 'EDIT SCENARIO'}</span>
+                <nav class="sc-breadcrumb" aria-label="現在地">
+                    <button type="button" class="sc-crumb sc-crumb-link" id="sc-crumb-root">SCENARIOS</button>
+                    <span class="sc-crumb-sep" aria-hidden="true">/</span>
+                    <span class="sc-crumb sc-crumb-current">${escapeHTML(crumbLeaf)}${name ? ': ' + escapeHTML(meta.title || name) : ''}</span>
+                </nav>
             </div>
             <div class="sc-editor-body">
                 <div class="sc-field">
@@ -205,7 +209,7 @@ class ScenarioPanel {
         };
 
         // ─── bindings ───
-        document.getElementById('sc-back-btn').addEventListener('click', tryClose);
+        document.getElementById('sc-crumb-root').addEventListener('click', tryClose);
         document.getElementById('sc-cancel-btn').addEventListener('click', tryClose);
         document.getElementById('sc-save-btn').addEventListener('click', doSave);
 
@@ -306,115 +310,6 @@ class ScenarioPanel {
         return { meta, body };
     }
 
-    // ─── Runner view ──────────────────────────────────────
-
-    showRunner(runner) {
-        this.currentView = 'runner';
-        this.el.innerHTML = `
-            <div class="sc-toolbar sc-runner-toolbar">
-                <button class="icon-btn sc-back-btn" id="sc-back-btn">←</button>
-                <span class="sc-view-title sc-runner-title">${escapeHTML(runner.meta.title)}</span>
-                <div class="sc-runner-controls">
-                    <button class="secondary-btn" id="sc-reset-btn" style="display:none">リセット</button>
-                    <button class="primary-btn sc-stop-btn" id="sc-stop-btn">停止</button>
-                </div>
-            </div>
-            <div class="sc-progress-bar-wrap">
-                <div class="sc-progress-bar" id="sc-progress-bar" style="width:0%"></div>
-            </div>
-            <div class="sc-progress-label" id="sc-progress-label">0 / ${runner.steps.length} ステップ完了</div>
-            <div class="sc-checklist" id="sc-checklist"></div>
-            <div class="sc-status-bar" id="sc-status-bar"></div>`;
-
-        document.getElementById('sc-back-btn').addEventListener('click', () => {
-            if (runner.isRunning) runner.stop();
-            this.showLibrary();
-        });
-        document.getElementById('sc-stop-btn').addEventListener('click', () => {
-            if (this.onStop) this.onStop();
-        });
-        document.getElementById('sc-reset-btn').addEventListener('click', () => {
-            if (this.onReset) this.onReset();
-        });
-
-        this._updateRunnerDOM(runner);
-    }
-
-    updateRunner(runner) {
-        if (this.currentView !== 'runner') return;
-        this._updateRunnerDOM(runner);
-    }
-
-    _updateRunnerDOM(runner) {
-        const p = runner.progress;
-
-        // progress bar
-        const pct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
-        const bar = document.getElementById('sc-progress-bar');
-        if (bar) bar.style.width = pct + '%';
-
-        const label = document.getElementById('sc-progress-label');
-        if (label) label.textContent = `${p.current} / ${p.total} ステップ完了`;
-
-        // progress bar color (complete = ok)
-        if (bar) {
-            bar.classList.toggle('sc-progress-bar-done', runner.status === 'done');
-        }
-
-        // checklist
-        const cl = document.getElementById('sc-checklist');
-        if (cl) {
-            cl.innerHTML = '';
-            let activeRow = null;
-            runner.steps.forEach(step => {
-                const row = document.createElement('div');
-                row.className = 'sc-step sc-step-' + step.status;
-
-                const icon = document.createElement('span');
-                icon.className = 'sc-step-icon';
-                icon.setAttribute('aria-hidden', 'true');
-
-                const text = document.createElement('span');
-                text.className = 'sc-step-text';
-                text.textContent = step.text;
-
-                row.appendChild(icon);
-                row.appendChild(text);
-
-                if (step.note && (step.status === 'done' || step.status === 'error' || step.status === 'active')) {
-                    const note = document.createElement('div');
-                    note.className = 'sc-step-note';
-                    note.textContent = step.note;
-                    row.appendChild(note);
-                }
-
-                cl.appendChild(row);
-                if (step.status === 'active') activeRow = row;
-            });
-
-            if (activeRow) {
-                activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-            }
-        }
-
-        // status bar + button states
-        const stopBtn  = document.getElementById('sc-stop-btn');
-        const resetBtn = document.getElementById('sc-reset-btn');
-        const statusBar = document.getElementById('sc-status-bar');
-
-        const statusText = {
-            idle:      '',
-            running:   '実行中...',
-            done:      'シナリオ完了',
-            cancelled: 'キャンセルされました',
-            error:     'エラーが発生しました',
-        }[runner.status] || '';
-
-        if (statusBar) statusBar.textContent = statusText;
-
-        if (stopBtn) stopBtn.style.display  = runner.status === 'running' ? '' : 'none';
-        if (resetBtn) resetBtn.style.display = runner.status !== 'running' && runner.status !== 'idle' ? '' : 'none';
-    }
 }
 
 // escapeHTML はグローバルに定義されていることを前提とするが、
