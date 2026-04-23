@@ -1064,3 +1064,350 @@ button:disabled {
     color: var(--text);
     background: var(--bg-input);
 }
+
+/* ── Mode tabs (header) ─────────────────────────────── */
+.mode-tabs {
+    display: flex;
+    gap: 0;
+    height: 100%;
+    align-items: stretch;
+}
+
+.mode-tab {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+    padding: 0 14px;
+    font-size: 13px;
+    font-family: var(--font-main);
+    cursor: pointer;
+    height: 100%;
+    transition: color 0.1s ease, border-color 0.1s ease;
+}
+
+.mode-tab:hover {
+    color: var(--text);
+}
+
+.mode-tab.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+}
+
+/* ── Scenario Panel (replaces .chat-area) ───────────── */
+.scenario-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* shared toolbar */
+.sc-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    height: 36px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-sidebar);
+    flex-shrink: 0;
+}
+
+.sc-view-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    flex: 1;
+}
+
+.sc-back-btn {
+    font-size: 14px;
+    padding: 4px 8px;
+    flex-shrink: 0;
+}
+
+.sc-new-btn {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* ── Library view ───────────────────────────────────── */
+.sc-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.sc-empty {
+    padding: 24px 20px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+}
+
+.sc-list-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.1s ease;
+}
+
+.sc-list-row:hover {
+    background: var(--bg-raised);
+}
+
+.sc-list-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.sc-list-title {
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sc-list-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sc-list-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.sc-list-actions .primary-btn,
+.sc-list-actions .secondary-btn {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* ── Editor view ────────────────────────────────────── */
+.sc-editor-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow-y: auto;
+    padding: 14px 16px;
+    min-height: 0;
+}
+
+.sc-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+}
+
+.sc-field-grow {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.sc-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.sc-input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-main);
+    font-size: 13px;
+    padding: 6px 10px;
+    outline: none;
+    transition: border-color 0.1s ease;
+}
+
+.sc-input:focus {
+    border-color: var(--accent);
+}
+
+.sc-textarea {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    outline: none;
+    resize: none;
+    line-height: 1.6;
+    min-height: 120px;
+    transition: border-color 0.1s ease;
+}
+
+.sc-textarea:focus {
+    border-color: var(--accent);
+}
+
+.sc-editor-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-sidebar);
+    flex-shrink: 0;
+}
+
+.sc-editor-footer .primary-btn,
+.sc-editor-footer .secondary-btn {
+    flex: 0 0 auto;
+    min-width: 80px;
+}
+
+/* ── Runner view ────────────────────────────────────── */
+.sc-runner-toolbar {
+    justify-content: space-between;
+}
+
+.sc-runner-title {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sc-runner-controls {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.sc-runner-controls .primary-btn,
+.sc-runner-controls .secondary-btn {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+.sc-stop-btn {
+    background: var(--danger) !important;
+    color: #fff !important;
+}
+
+.sc-stop-btn:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.sc-progress-bar-wrap {
+    height: 2px;
+    background: var(--border);
+    flex-shrink: 0;
+}
+
+.sc-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s ease;
+}
+
+.sc-progress-label {
+    padding: 6px 16px;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.sc-checklist {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.sc-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    transition: background-color 0.1s ease;
+}
+
+.sc-step-active {
+    background: var(--bg-raised);
+    border-left: 2px solid var(--accent);
+    padding-left: 14px;
+}
+
+.sc-step-done {
+    opacity: 0.7;
+}
+
+.sc-step-error {
+    border-left: 2px solid var(--danger);
+    padding-left: 14px;
+}
+
+.sc-step-icon {
+    font-size: 14px;
+    line-height: 1.4;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+}
+
+.sc-step-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.sc-step-text {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.4;
+}
+
+.sc-step-active .sc-step-text {
+    color: var(--text);
+    font-weight: 500;
+}
+
+.sc-step-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    font-family: var(--font-mono);
+    line-height: 1.4;
+}
+
+.sc-status-bar {
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-top: 1px solid var(--border);
+    min-height: 32px;
+    flex-shrink: 0;
+    background: var(--bg-sidebar);
+}

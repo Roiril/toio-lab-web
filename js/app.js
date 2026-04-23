@@ -54,6 +54,33 @@ document.addEventListener("DOMContentLoaded", () => {
     const cameraMirrorLabel = document.getElementById("camera-mirror-label");
     const handMarker = document.getElementById("hand-marker");
 
+    // --- Mode switching ---
+    const chatArea = document.querySelector('.chat-area');
+    const scenarioPanelEl = document.getElementById('scenario-panel');
+    let currentMode = 'chat';
+
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            if (tab.dataset.mode === currentMode) return;
+            switchMode(tab.dataset.mode);
+        });
+    });
+
+    function switchMode(mode) {
+        currentMode = mode;
+        document.querySelectorAll('.mode-tab').forEach(t =>
+            t.classList.toggle('active', t.dataset.mode === mode)
+        );
+        if (mode === 'chat') {
+            chatArea.style.display = '';
+            scenarioPanelEl.style.display = 'none';
+        } else {
+            chatArea.style.display = 'none';
+            scenarioPanelEl.style.display = '';
+            scenarioPanel.showLibrary();
+        }
+    }
+
     // --- State & Instances ---
     const spatialAwareness = new SpatialAwareness();
     const toioBle = new ToioBLE();
@@ -156,6 +183,71 @@ document.addEventListener("DOMContentLoaded", () => {
     let agentLoop = llmClient
         ? new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, { onStep: handleAgentStep })
         : null;
+
+    // --- Scenario mode ---
+    const scenarioPanel = new ScenarioPanel(scenarioPanelEl);
+    let scenarioRunner = null;
+
+    scenarioPanel.onRun = async (name) => {
+        if (!agentLoop) { alert('LLM が接続されていません'); return; }
+        try {
+            const res = await fetch(`/api/scenarios/${name}`);
+            const data = await res.json();
+            scenarioRunner = new ScenarioRunner(agentLoop, {
+                onStateChange: () => scenarioPanel.updateRunner(scenarioRunner)
+            });
+            scenarioRunner.load(data.content);
+            scenarioPanel.showRunner(scenarioRunner);
+            // 実行開始（非同期、UI はコールバックで更新）
+            scenarioRunner.start().catch(e => console.error('scenario error:', e));
+        } catch (e) {
+            alert('シナリオの読み込みに失敗しました: ' + e.message);
+        }
+    };
+
+    scenarioPanel.onEdit = async (name) => {
+        try {
+            const res = await fetch(`/api/scenarios/${name}`);
+            const data = await res.json();
+            scenarioPanel.showEditor(name, data.content);
+        } catch (e) {
+            alert('シナリオの読み込みに失敗しました: ' + e.message);
+        }
+    };
+
+    scenarioPanel.onDelete = async (name) => {
+        if (!confirm(`「${name}」を削除しますか？`)) return;
+        try {
+            await fetch(`/api/scenarios/${name}`, { method: 'DELETE' });
+            scenarioPanel.showLibrary();
+        } catch (e) {
+            alert('削除に失敗しました: ' + e.message);
+        }
+    };
+
+    scenarioPanel.onSave = async (name, markdown) => {
+        try {
+            await fetch(`/api/scenarios/${name}`, {
+                method: 'PUT',
+                body: markdown,
+                headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+            });
+            scenarioPanel.showLibrary();
+        } catch (e) {
+            alert('保存に失敗しました: ' + e.message);
+        }
+    };
+
+    scenarioPanel.onStop = () => {
+        if (scenarioRunner) scenarioRunner.stop();
+    };
+
+    scenarioPanel.onReset = () => {
+        if (scenarioRunner) {
+            scenarioRunner.reset();
+            scenarioPanel.updateRunner(scenarioRunner);
+        }
+    };
 
     // --- initialization ---
     checkLlmConnection();
