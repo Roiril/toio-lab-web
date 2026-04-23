@@ -62,6 +62,10 @@
                         <button id="camera-preview-btn" class="secondary-btn" disabled>Preview</button>
                     </div>
                     <select id="camera-device-select" class="camera-device-select" style="display:none; margin-top:8px;"></select>
+                    <label class="camera-mirror-toggle" id="camera-mirror-label" style="display:none">
+                        <input type="checkbox" id="camera-mirror-toggle">
+                        <span>映像を左右反転</span>
+                    </label>
                 </section>
             </aside>
 
@@ -116,6 +120,7 @@
                     <div id="simulation-mat" class="simulation-mat">
                         <div id="sim-cube" class="sim-cube">toio</div>
                         <div id="ghost-cube" class="sim-cube ghost" style="display: none;">REAL</div>
+                        <div id="hand-marker" class="hand-marker" style="display:none;" title="検出された手の位置">✋</div>
                     </div>
                     <div class="sim-readout" id="sim-readout">(—, —) · —°</div>
                 </section>
@@ -201,6 +206,7 @@
     <!-- Scripts -->
     <script src="js/config.js"></script>
     <script src="js/camera.js"></script>
+    <script src="js/hand-tracker.js"></script>
     <script src="js/spatial-awareness.js"></script>
     <script src="js/session-memory.js"></script>
     <script src="js/toio-ble.js"></script>

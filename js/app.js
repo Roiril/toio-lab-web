@@ -50,6 +50,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const cameraUrlInput = document.getElementById("camera-url-input");
     const cameraUrlGroup = document.getElementById("camera-url-group");
     const cameraDeviceSelect = document.getElementById("camera-device-select");
+    const cameraMirrorToggle = document.getElementById("camera-mirror-toggle");
+    const cameraMirrorLabel = document.getElementById("camera-mirror-label");
+    const handMarker = document.getElementById("hand-marker");
 
     // --- State & Instances ---
     const spatialAwareness = new SpatialAwareness();
@@ -105,6 +108,38 @@ document.addEventListener("DOMContentLoaded", () => {
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
     const executor = new ToolExecutor(combinedToio, environment, sessionMemory);
     let cameraClient = createCameraClient(savedCameraSource, savedCameraUrl, savedCameraDeviceId);
+    const handTracker = new HandTracker();
+
+    // カメラによっては映像が既に反転済みなので手動で切り替えられるようにする。
+    // デバイス毎に localStorage に記憶する（キー: camera_mirror:<deviceId>）。
+    function mirrorKey(deviceId) { return 'camera_mirror:' + (deviceId || ''); }
+    function getMirrorFor(deviceId) {
+        const v = localStorage.getItem(mirrorKey(deviceId));
+        return v === '1';
+    }
+    function setMirrorFor(deviceId, mirrored) {
+        localStorage.setItem(mirrorKey(deviceId), mirrored ? '1' : '0');
+    }
+    function applyMirror(mirrored) {
+        cameraPreviewVideo.classList.toggle('mirrored', mirrored);
+        if (cameraMirrorToggle) cameraMirrorToggle.checked = mirrored;
+    }
+
+    // 手の位置をシミュレータ上のマーカーに反映する。
+    // 映像をミラー表示しているときは表示座標も左右反転する。
+    function onHandUpdate(h) {
+        if (!handMarker) return;
+        if (!h.present) {
+            handMarker.style.display = 'none';
+            return;
+        }
+        const mirrored = cameraPreviewVideo.classList.contains('mirrored');
+        const xPct = (mirrored ? (1 - h.x) : h.x) * 100;
+        const yPct = h.y * 100;
+        handMarker.style.display = 'flex';
+        handMarker.style.left = xPct + '%';
+        handMarker.style.top = yPct + '%';
+    }
 
     function createCameraClient(source, url, deviceId) {
         return source === 'esp32'
@@ -273,6 +308,8 @@ document.addEventListener("DOMContentLoaded", () => {
         // ソース切り替え: プレビュー停止して Client を作り直し
         if (isPreviewing) {
             cameraClient.stopPreview();
+            handTracker.stop();
+            if (handMarker) handMarker.style.display = 'none';
             isPreviewing = false;
             cameraPreviewBtn.textContent = 'Preview';
         }
@@ -330,11 +367,13 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!cameraDeviceSelect) return;
         if (!(cameraClient instanceof UsbCameraClient)) {
             cameraDeviceSelect.style.display = 'none';
+            if (cameraMirrorLabel) cameraMirrorLabel.style.display = 'none';
             return;
         }
         const devices = await cameraClient.listDevices();
         if (devices.length === 0) {
             cameraDeviceSelect.style.display = 'none';
+            if (cameraMirrorLabel) cameraMirrorLabel.style.display = 'none';
             return;
         }
         cameraDeviceSelect.innerHTML = '';
@@ -354,6 +393,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         // USB モードのときは常に表示（1 台しかなくても現在使用中のカメラが見えるように）
         cameraDeviceSelect.style.display = 'block';
+        if (cameraMirrorLabel) cameraMirrorLabel.style.display = 'flex';
+        applyMirror(getMirrorFor(savedCameraDeviceId));
     }
 
     // USB カメラのプレビュー開始（権限要求を兼ねる）。成功時 true を返す。
@@ -369,6 +410,12 @@ document.addEventListener("DOMContentLoaded", () => {
             cameraPlaceholder.style.display = 'none';
             // 権限付与後はラベルが取れるのでリスト更新
             await refreshCameraDeviceSelect();
+            // 手検出を開始（初回のみモデルロード、video 要素が必要）
+            if (target.tagName === 'VIDEO') {
+                handTracker.init()
+                    .then(() => handTracker.start(target, onHandUpdate))
+                    .catch(e => console.warn('[hand-tracker] init failed:', e));
+            }
             return true;
         } catch (e) {
             isPreviewing = false;
@@ -419,6 +466,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const id = cameraDeviceSelect.value;
             savedCameraDeviceId = id;
             localStorage.setItem('camera_device_id', id);
+            applyMirror(getMirrorFor(id));
             if (cameraClient instanceof UsbCameraClient) {
                 cameraClient.setDeviceId(id);
                 // 選択したら即プレビューを起こす（まだ開いてなければ開く）
@@ -427,6 +475,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
                 // 起動中なら setDeviceId 内で再開するので何もしない
             }
+        });
+    }
+
+    if (cameraMirrorToggle) {
+        cameraMirrorToggle.addEventListener('change', () => {
+            const on = cameraMirrorToggle.checked;
+            setMirrorFor(savedCameraDeviceId, on);
+            applyMirror(on);
         });
     }
 
@@ -449,6 +505,8 @@ document.addEventListener("DOMContentLoaded", () => {
     cameraPreviewBtn.addEventListener('click', async () => {
         if (isPreviewing) {
             cameraClient.stopPreview();
+            handTracker.stop();
+            if (handMarker) handMarker.style.display = 'none';
             isPreviewing = false;
             cameraPreviewBtn.textContent = 'Preview';
             setPlaceholder('No feed');

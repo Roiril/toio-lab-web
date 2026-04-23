@@ -667,6 +667,23 @@ button:disabled {
     color: var(--accent);
 }
 
+.hand-marker {
+    position: absolute;
+    width: 10%;
+    aspect-ratio: 1 / 1;
+    top: 0;
+    left: 0;
+    transform: translate(-50%, -50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(14px, 3vw, 22px);
+    pointer-events: none;
+    z-index: 10;
+    filter: drop-shadow(0 0 4px rgba(0, 200, 255, 0.8));
+    transition: top 80ms linear, left 80ms linear, opacity 200ms;
+}
+
 /* Direction indicator */
 .sim-cube::after {
     content: '▲';
@@ -956,6 +973,23 @@ button:disabled {
     object-fit: cover;
     display: block;
 }
+
+/* ミラー表示切替（カメラによって既に反転済みのものがあるため手動指定）。 */
+#camera-preview-video.mirrored {
+    transform: scaleX(-1);
+}
+
+.camera-mirror-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+}
+.camera-mirror-toggle input { cursor: pointer; }
 
 .camera-placeholder {
     width: 100%;
