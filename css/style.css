@@ -1328,7 +1328,11 @@ button:disabled {
 .sc-progress-bar {
     height: 100%;
     background: var(--accent);
-    transition: width 0.3s ease;
+    transition: width 0.3s ease, background-color 0.2s ease;
+}
+
+.sc-progress-bar-done {
+    background: var(--ok);
 }
 
 .sc-progress-label {
@@ -1347,34 +1351,119 @@ button:disabled {
 }
 
 .sc-step {
-    padding: 8px 16px;
+    padding: 8px 16px 8px 14px;
     font-size: 13px;
     color: var(--text-muted);
     border-left: 2px solid transparent;
     border-bottom: 1px solid var(--border);
     line-height: 1.5;
     transition: background-color 0.1s, color 0.1s;
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    column-gap: 10px;
+    align-items: start;
 }
 
 .sc-step:last-child {
     border-bottom: none;
 }
 
+.sc-step-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-top: 3px;
+    border: 1px solid var(--border-strong);
+    font-size: 10px;
+    line-height: 1;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.sc-step-icon::before {
+    content: "";
+}
+
+.sc-step-text {
+    min-width: 0;
+    word-break: break-word;
+}
+
+.sc-step-note {
+    grid-column: 2;
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 .sc-step-active {
     color: var(--text);
     border-left-color: var(--accent);
     background: var(--bg-raised);
-    font-weight: 500;
+}
+
+.sc-step-active .sc-step-icon {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.sc-step-active .sc-step-icon::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    animation: sc-step-pulse 1s ease-in-out infinite;
+}
+
+@keyframes sc-step-pulse {
+    0%, 100% { opacity: 0.3; }
+    50%      { opacity: 1; }
 }
 
 .sc-step-done {
+    color: var(--text-muted);
+}
+
+.sc-step-done .sc-step-text {
     text-decoration: line-through;
-    opacity: 0.4;
+    opacity: 0.6;
+}
+
+.sc-step-done .sc-step-icon {
+    border-color: var(--ok);
+    color: var(--ok);
+}
+
+.sc-step-done .sc-step-icon::before {
+    content: "✓";
+    font-size: 11px;
+    font-weight: 700;
 }
 
 .sc-step-error {
     color: var(--danger);
     border-left-color: var(--danger);
+}
+
+.sc-step-error .sc-step-icon {
+    border-color: var(--danger);
+    color: var(--danger);
+}
+
+.sc-step-error .sc-step-icon::before {
+    content: "✕";
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.sc-step-error .sc-step-note {
+    color: var(--danger);
 }
 
 .sc-status-bar {

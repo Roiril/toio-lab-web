@@ -189,16 +189,45 @@ class ScenarioPanel {
         const label = document.getElementById('sc-progress-label');
         if (label) label.textContent = `${p.current} / ${p.total} ステップ完了`;
 
+        // progress bar color (complete = ok)
+        if (bar) {
+            bar.classList.toggle('sc-progress-bar-done', runner.status === 'done');
+        }
+
         // checklist
         const cl = document.getElementById('sc-checklist');
         if (cl) {
             cl.innerHTML = '';
+            let activeRow = null;
             runner.steps.forEach(step => {
                 const row = document.createElement('div');
                 row.className = 'sc-step sc-step-' + step.status;
-                row.textContent = step.text;
+
+                const icon = document.createElement('span');
+                icon.className = 'sc-step-icon';
+                icon.setAttribute('aria-hidden', 'true');
+
+                const text = document.createElement('span');
+                text.className = 'sc-step-text';
+                text.textContent = step.text;
+
+                row.appendChild(icon);
+                row.appendChild(text);
+
+                if (step.note && (step.status === 'done' || step.status === 'error' || step.status === 'active')) {
+                    const note = document.createElement('div');
+                    note.className = 'sc-step-note';
+                    note.textContent = step.note;
+                    row.appendChild(note);
+                }
+
                 cl.appendChild(row);
+                if (step.status === 'active') activeRow = row;
             });
+
+            if (activeRow) {
+                activeRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
         }
 
         // status bar + button states
