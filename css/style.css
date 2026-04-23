@@ -1293,8 +1293,6 @@ button:disabled {
 
 .sc-label {
     font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
     color: var(--text-muted);
     font-weight: 600;
 }
@@ -1335,6 +1333,7 @@ button:disabled {
 
 .sc-editor-footer {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     gap: 8px;
     padding: 10px 16px;
@@ -1343,10 +1342,120 @@ button:disabled {
     flex-shrink: 0;
 }
 
+.sc-editor-hint {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
 .sc-editor-footer .primary-btn,
 .sc-editor-footer .secondary-btn {
     flex: 0 0 auto;
     min-width: 80px;
+}
+
+.sc-required {
+    color: var(--danger);
+    font-weight: 600;
+    margin-left: 2px;
+}
+
+.sc-error {
+    font-size: 11px;
+    color: var(--danger);
+    margin-top: 4px;
+    min-height: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.15s ease, margin-top 0.15s ease;
+}
+
+.sc-error.visible {
+    max-height: 20px;
+    margin-top: 4px;
+}
+
+.sc-steps-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.sc-step-count {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    letter-spacing: 0;
+}
+
+.sc-step-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 8px;
+}
+
+.sc-step-edit-row {
+    display: grid;
+    grid-template-columns: 22px 1fr 24px 24px 24px;
+    align-items: center;
+    gap: 4px;
+}
+
+.sc-step-edit-num {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    text-align: right;
+    padding-right: 4px;
+}
+
+.sc-step-edit-input {
+    font-size: 13px;
+    padding: 5px 8px;
+}
+
+.sc-step-edit-row .icon-btn {
+    width: 24px;
+    height: 26px;
+    padding: 0;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sc-step-edit-row .icon-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.sc-step-edit-row .icon-btn:hover:not(:disabled) {
+    background: var(--bg-raised);
+    color: var(--text);
+}
+
+.sc-step-edit-row .sc-step-del:hover:not(:disabled) {
+    color: var(--danger);
+}
+
+.sc-add-step-btn {
+    align-self: flex-start;
+    flex: 0 0 auto;
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.sc-add-step-btn:hover {
+    color: var(--text);
 }
 
 /* ── Runner view ────────────────────────────────────── */
