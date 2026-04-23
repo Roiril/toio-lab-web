@@ -1147,27 +1147,60 @@ button:disabled {
 }
 
 .sc-empty {
-    padding: 24px 20px;
+    padding: 32px 20px;
     color: var(--text-muted);
     font-size: 12px;
     text-align: center;
 }
 
+.sc-empty-title {
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
+.sc-empty-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
 .sc-list-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
+    gap: 10px;
+    padding: 10px 12px 10px 14px;
     border-bottom: 1px solid var(--border);
     transition: background-color 0.1s ease;
+    cursor: pointer;
 }
 
 .sc-list-row:hover {
     background: var(--bg-raised);
 }
 
+.sc-list-icon {
+    width: 14px;
+    color: var(--text-muted);
+    font-size: 9px;
+    flex-shrink: 0;
+    text-align: center;
+    line-height: 1;
+    transition: color 0.1s ease;
+}
+
+.sc-list-row:hover .sc-list-icon {
+    color: var(--accent);
+}
+
 .sc-list-info {
     flex: 1;
+    min-width: 0;
+}
+
+.sc-list-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
     min-width: 0;
 }
 
@@ -1178,6 +1211,17 @@ button:disabled {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.sc-list-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
 }
 
 .sc-list-desc {
@@ -1191,15 +1235,35 @@ button:disabled {
 
 .sc-list-actions {
     display: flex;
-    gap: 6px;
+    gap: 2px;
     flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.1s ease;
 }
 
-.sc-list-actions .primary-btn,
-.sc-list-actions .secondary-btn {
-    flex: 0 0 auto;
-    padding: 4px 10px;
-    font-size: 12px;
+.sc-list-row:hover .sc-list-actions,
+.sc-list-row:focus-within .sc-list-actions {
+    opacity: 1;
+}
+
+.sc-list-actions .icon-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.sc-list-actions .icon-btn:hover {
+    background: var(--bg-input);
+    color: var(--text);
+}
+
+.sc-list-actions .sc-del-btn:hover {
+    color: var(--danger);
 }
 
 /* ── Editor view ────────────────────────────────────── */

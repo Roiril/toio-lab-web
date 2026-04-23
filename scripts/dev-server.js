@@ -66,11 +66,22 @@ function handleScenarioApi(req, res) {
         const files = fs.readdirSync(SCENARIOS_DIR)
             .filter(f => f.endsWith('.md'))
             .map(f => {
+                const fp = path.join(SCENARIOS_DIR, f);
                 const name = f.replace(/\.md$/, '');
-                const content = fs.readFileSync(path.join(SCENARIOS_DIR, f), 'utf-8');
+                const content = fs.readFileSync(fp, 'utf-8');
                 const meta = parseMetaFromContent(content);
-                return { name, title: meta.title || name, description: meta.description || '' };
-            });
+                const stepCount = (content.match(/^-\s*\[[ xX]\]/gm) || []).length;
+                let mtime = 0;
+                try { mtime = fs.statSync(fp).mtimeMs; } catch {}
+                return {
+                    name,
+                    title: meta.title || name,
+                    description: meta.description || '',
+                    stepCount,
+                    mtime,
+                };
+            })
+            .sort((a, b) => b.mtime - a.mtime);
         json(res, files);
         return true;
     }

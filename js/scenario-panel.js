@@ -26,7 +26,7 @@ class ScenarioPanel {
         this.el.innerHTML = `
             <div class="sc-toolbar">
                 <span class="sc-view-title">SCENARIOS</span>
-                <button class="secondary-btn sc-new-btn" id="sc-new-btn">+ New</button>
+                <button class="secondary-btn sc-new-btn" id="sc-new-btn">＋ 新規</button>
             </div>
             <div class="sc-list" id="sc-list">
                 <div class="sc-empty">読み込み中...</div>
@@ -50,33 +50,51 @@ class ScenarioPanel {
         const list = document.getElementById('sc-list');
         if (!list) return;
         if (!scenarios.length) {
-            list.innerHTML = '<div class="sc-empty">シナリオがありません。「+ New」で作成してください。</div>';
+            list.innerHTML = `
+                <div class="sc-empty">
+                    <div class="sc-empty-title">シナリオがまだありません</div>
+                    <div class="sc-empty-sub">右上の「＋ 新規」から最初のシナリオを作成してください</div>
+                </div>`;
             return;
         }
         list.innerHTML = '';
         scenarios.forEach(s => {
             const row = document.createElement('div');
             row.className = 'sc-list-row';
+            row.dataset.name = s.name;
+            row.title = '行をクリックで実行';
+            const stepLabel = (s.stepCount || 0) + ' steps';
             row.innerHTML = `
+                <div class="sc-list-icon" aria-hidden="true">▶</div>
                 <div class="sc-list-info">
-                    <div class="sc-list-title">${escapeHTML(s.title)}</div>
-                    <div class="sc-list-desc">${escapeHTML(s.description)}</div>
+                    <div class="sc-list-title-row">
+                        <span class="sc-list-title">${escapeHTML(s.title)}</span>
+                        <span class="sc-list-meta">${escapeHTML(stepLabel)}</span>
+                    </div>
+                    <div class="sc-list-desc">${escapeHTML(s.description || '（説明なし）')}</div>
                 </div>
                 <div class="sc-list-actions">
-                    <button class="primary-btn sc-run-btn" data-name="${escapeHTML(s.name)}">Run</button>
-                    <button class="secondary-btn sc-edit-btn" data-name="${escapeHTML(s.name)}">Edit</button>
-                    <button class="secondary-btn sc-del-btn" data-name="${escapeHTML(s.name)}">Delete</button>
+                    <button class="icon-btn sc-edit-btn" data-name="${escapeHTML(s.name)}" title="編集" aria-label="編集">✎</button>
+                    <button class="icon-btn sc-del-btn" data-name="${escapeHTML(s.name)}" title="削除" aria-label="削除">🗑</button>
                 </div>`;
             list.appendChild(row);
         });
 
         list.addEventListener('click', e => {
-            const run  = e.target.closest('.sc-run-btn');
             const edit = e.target.closest('.sc-edit-btn');
             const del  = e.target.closest('.sc-del-btn');
-            if (run  && this.onRun)    this.onRun(run.dataset.name);
-            if (edit && this.onEdit)   this.onEdit(edit.dataset.name);
-            if (del  && this.onDelete) this.onDelete(del.dataset.name);
+            if (edit) {
+                e.stopPropagation();
+                if (this.onEdit) this.onEdit(edit.dataset.name);
+                return;
+            }
+            if (del) {
+                e.stopPropagation();
+                if (this.onDelete) this.onDelete(del.dataset.name);
+                return;
+            }
+            const row = e.target.closest('.sc-list-row');
+            if (row && this.onRun) this.onRun(row.dataset.name);
         });
     }
 
