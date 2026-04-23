@@ -75,6 +75,9 @@ document.addEventListener("DOMContentLoaded", () => {
             chatArea.style.display = '';
             scenarioPanelEl.style.display = 'none';
         } else {
+            // シナリオ実行中はモード切替をブロック
+            if (scenarioRunner && scenarioRunner.isRunning) return;
+            hideScenarioProgress();
             chatArea.style.display = 'none';
             scenarioPanelEl.style.display = '';
             scenarioPanel.showLibrary();
@@ -188,18 +191,103 @@ document.addEventListener("DOMContentLoaded", () => {
     const scenarioPanel = new ScenarioPanel(scenarioPanelEl);
     let scenarioRunner = null;
 
+    // ── 進捗ウィジェット ──────────────────────────────────
+    const scenarioProgressEl = document.getElementById('scenario-progress');
+    const scProgTitle  = document.getElementById('sc-prog-title');
+    const scProgCount  = document.getElementById('sc-prog-count');
+    const scProgBar    = document.getElementById('sc-prog-bar');
+    const scProgList   = document.getElementById('sc-prog-list');
+    const scProgToggle = document.getElementById('sc-prog-toggle');
+    const scProgStop   = document.getElementById('sc-prog-stop');
+
+    let progListCollapsed = false;
+
+    scProgToggle.addEventListener('click', () => {
+        progListCollapsed = !progListCollapsed;
+        scProgList.classList.toggle('hidden', progListCollapsed);
+        scProgToggle.classList.toggle('collapsed', progListCollapsed);
+    });
+
+    scProgStop.addEventListener('click', () => {
+        if (scenarioRunner) scenarioRunner.stop();
+    });
+
+    function showScenarioProgress(runner) {
+        scenarioProgressEl.style.display = '';
+        progListCollapsed = false;
+        scProgList.classList.remove('hidden');
+        scProgToggle.classList.remove('collapsed');
+        updateScenarioProgress(runner);
+    }
+
+    function hideScenarioProgress() {
+        scenarioProgressEl.style.display = 'none';
+    }
+
+    function updateScenarioProgress(runner) {
+        const p = runner.progress;
+        const pct = p.total > 0 ? Math.round((p.current / p.total) * 100) : 0;
+
+        scProgTitle.textContent = runner.meta.title;
+        scProgCount.textContent = `${p.current} / ${p.total}`;
+        scProgBar.style.width = pct + '%';
+
+        // 停止ボタンの表示制御
+        scProgStop.style.display = runner.isRunning ? '' : 'none';
+
+        // チェックリスト描画
+        scProgList.innerHTML = '';
+        runner.steps.forEach(step => {
+            const item = document.createElement('div');
+            item.className = 'sc-prog-item ' + step.status;
+            item.textContent = step.text;
+            scProgList.appendChild(item);
+
+            // アクティブステップを自動スクロール
+            if (step.status === 'active') {
+                setTimeout(() => item.scrollIntoView({ block: 'nearest' }), 0);
+            }
+        });
+    }
+
+    // ── シナリオパネルのコールバック ──────────────────────
     scenarioPanel.onRun = async (name) => {
         if (!agentLoop) { alert('LLM が接続されていません'); return; }
         try {
             const res = await fetch(`/api/scenarios/${name}`);
             const data = await res.json();
+
             scenarioRunner = new ScenarioRunner(agentLoop, {
-                onStateChange: () => scenarioPanel.updateRunner(scenarioRunner)
+                onStateChange: () => {
+                    updateScenarioProgress(scenarioRunner);
+                    // 終了したらウィジェットを完了状態に更新
+                    if (!scenarioRunner.isRunning) {
+                        setChatProcessingState(false);
+                        scProgStop.style.display = 'none';
+                    }
+                },
+                onStepStart: (step) => {
+                    // チャット履歴にステップ区切りを挿入
+                    const div = document.createElement('div');
+                    div.className = 'message system scenario-step';
+                    div.innerHTML = `<div class="message-content">▶ ステップ ${step.id + 1}: ${escapeHTML(step.text)}</div>`;
+                    chatHistory.appendChild(div);
+                    maybeScroll();
+                }
             });
+
             scenarioRunner.load(data.content);
-            scenarioPanel.showRunner(scenarioRunner);
-            // 実行開始（非同期、UI はコールバックで更新）
-            scenarioRunner.start().catch(e => console.error('scenario error:', e));
+
+            // チャットモードに切り替えて進捗ウィジェットを表示
+            switchMode('chat');
+            chatHistory.innerHTML = '';  // 前のチャット履歴をクリア
+            showScenarioProgress(scenarioRunner);
+            setChatProcessingState(true); // チャット入力を無効化
+
+            scenarioRunner.start().catch(e => {
+                console.error('scenario error:', e);
+                setChatProcessingState(false);
+            });
         } catch (e) {
             alert('シナリオの読み込みに失敗しました: ' + e.message);
         }
@@ -235,17 +323,6 @@ document.addEventListener("DOMContentLoaded", () => {
             scenarioPanel.showLibrary();
         } catch (e) {
             alert('保存に失敗しました: ' + e.message);
-        }
-    };
-
-    scenarioPanel.onStop = () => {
-        if (scenarioRunner) scenarioRunner.stop();
-    };
-
-    scenarioPanel.onReset = () => {
-        if (scenarioRunner) {
-            scenarioRunner.reset();
-            scenarioPanel.updateRunner(scenarioRunner);
         }
     };
 
@@ -310,10 +387,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     sendBtn.addEventListener('click', submitChat);
     cancelBtn.addEventListener('click', () => {
-        if (agentLoop) {
+        if (scenarioRunner && scenarioRunner.isRunning) {
+            scenarioRunner.stop();
+        } else if (agentLoop) {
             agentLoop.cancel();
-            cancelBtn.disabled = true;
         }
+        cancelBtn.disabled = true;
     });
 
     chatInput.addEventListener('keydown', (e) => {

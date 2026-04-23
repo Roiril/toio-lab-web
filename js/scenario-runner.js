@@ -4,17 +4,18 @@
  * 設計原則:
  *   - チェックリストの状態はシステムが持つ（LLMは知らない）
  *   - LLMはステップごとに agentLoop.run() を1回呼ばれ、実行のみ担当
- *   - complete_step ツールは不要。run() が返ったら自動的に次へ進む
+ *   - agentLoop.onStep は上書きしない。チャット履歴への描画はそのまま動く
+ *   - onStepStart(step) コールバックでステップ開始をアプリ側に通知
  */
 class ScenarioRunner {
-    constructor(agentLoop, { onStateChange } = {}) {
+    constructor(agentLoop, { onStateChange, onStepStart } = {}) {
         this.agentLoop = agentLoop;
         this.onStateChange = onStateChange || (() => {});
+        this.onStepStart   = onStepStart   || (() => {});
         this.steps = [];
         this.meta = { title: '', description: '' };
         this.status = 'idle'; // idle | running | done | cancelled | error
         this._cancelRequested = false;
-        this._savedOnStep = null;
     }
 
     static parseMarkdown(text) {
@@ -49,58 +50,46 @@ class ScenarioRunner {
         this.onStateChange();
     }
 
-    async start(scenarioOnStep) {
+    async start() {
         if (this.status === 'running') return;
         this.status = 'running';
         this._cancelRequested = false;
-
-        // agentLoop の onStep をシナリオ用に差し替え（終了後に復元）
-        this._savedOnStep = this.agentLoop.onStep;
-        if (scenarioOnStep) this.agentLoop.onStep = scenarioOnStep;
-
         this.onStateChange();
 
-        try {
-            for (const step of this.steps) {
-                if (this._cancelRequested) break;
-                if (step.status === 'done') continue;
+        for (const step of this.steps) {
+            if (this._cancelRequested) break;
+            if (step.status === 'done') continue;
 
-                step.status = 'active';
-                step.note = '実行中...';
-                this.onStateChange();
+            // ステップ開始をアプリ側に通知（チャット履歴に区切り線を入れる等）
+            this.onStepStart(step);
 
-                try {
-                    const result = await this.agentLoop.run(
-                        this._buildStepPrompt(step),
-                        agentTools
-                    );
+            step.status = 'active';
+            step.note = '実行中...';
+            this.onStateChange();
 
-                    if (this._cancelRequested) {
-                        step.status = 'pending';
-                        step.note = '';
-                        break;
-                    }
+            try {
+                const result = await this.agentLoop.run(
+                    this._buildStepPrompt(step),
+                    agentTools
+                );
 
-                    // LLM の最終発話をメモとして記録
-                    const msg = result && result.finalMessage ? result.finalMessage : '完了';
-                    step.note = msg;
-                    step.status = 'done';
-                } catch (e) {
-                    step.note = 'エラー: ' + e.message;
-                    step.status = 'error';
-                    this.status = 'error';
-                    this.onStateChange();
-                    return;
+                if (this._cancelRequested) {
+                    step.status = 'pending';
+                    step.note = '';
+                    break;
                 }
 
+                step.note = (result && result.finalMessage) ? result.finalMessage : '完了';
+                step.status = 'done';
+            } catch (e) {
+                step.note = 'エラー: ' + e.message;
+                step.status = 'error';
+                this.status = 'error';
                 this.onStateChange();
+                return;
             }
-        } finally {
-            // onStep を必ず元に戻す
-            if (this._savedOnStep !== null) {
-                this.agentLoop.onStep = this._savedOnStep;
-                this._savedOnStep = null;
-            }
+
+            this.onStateChange();
         }
 
         this.status = this._cancelRequested ? 'cancelled' : 'done';

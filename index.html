@@ -75,6 +75,20 @@
 
             <!-- Chat Area -->
             <main class="chat-area glass-panel">
+                <!-- Scenario progress widget (visible while a scenario is running) -->
+                <div id="scenario-progress" class="scenario-progress" style="display:none">
+                    <div class="sc-prog-header">
+                        <span class="sc-prog-title" id="sc-prog-title"></span>
+                        <span class="sc-prog-count" id="sc-prog-count"></span>
+                        <button class="icon-btn sc-prog-toggle" id="sc-prog-toggle" title="チェックリストを折りたたむ">▾</button>
+                        <button class="secondary-btn sc-prog-stop" id="sc-prog-stop">停止</button>
+                    </div>
+                    <div class="sc-prog-bar-wrap">
+                        <div class="sc-prog-bar" id="sc-prog-bar" style="width:0%"></div>
+                    </div>
+                    <div class="sc-prog-list" id="sc-prog-list"></div>
+                </div>
+
                 <div class="chat-history" id="chat-history">
                     <div class="message system welcome">
                         <div class="message-content">

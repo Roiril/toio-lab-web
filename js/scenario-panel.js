@@ -196,16 +196,7 @@ class ScenarioPanel {
             runner.steps.forEach(step => {
                 const row = document.createElement('div');
                 row.className = 'sc-step sc-step-' + step.status;
-
-                const iconMap = { done: '✅', active: '⏳', error: '❌', pending: '⬜' };
-                const icon = iconMap[step.status] || '⬜';
-
-                row.innerHTML = `
-                    <span class="sc-step-icon">${icon}</span>
-                    <div class="sc-step-body">
-                        <div class="sc-step-text">${escapeHTML(step.text)}</div>
-                        ${step.note ? `<div class="sc-step-note">${escapeHTML(step.note)}</div>` : ''}
-                    </div>`;
+                row.textContent = step.text;
                 cl.appendChild(row);
             });
         }
@@ -218,7 +209,7 @@ class ScenarioPanel {
         const statusText = {
             idle:      '',
             running:   '実行中...',
-            done:      '✅ シナリオ完了',
+            done:      'シナリオ完了',
             cancelled: 'キャンセルされました',
             error:     'エラーが発生しました',
         }[runner.status] || '';

@@ -1347,59 +1347,34 @@ button:disabled {
 }
 
 .sc-step {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 10px 16px;
+    padding: 8px 16px;
+    font-size: 13px;
+    color: var(--text-muted);
+    border-left: 2px solid transparent;
     border-bottom: 1px solid var(--border);
-    transition: background-color 0.1s ease;
+    line-height: 1.5;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.sc-step:last-child {
+    border-bottom: none;
 }
 
 .sc-step-active {
+    color: var(--text);
+    border-left-color: var(--accent);
     background: var(--bg-raised);
-    border-left: 2px solid var(--accent);
-    padding-left: 14px;
-}
-
-.sc-step-done {
-    opacity: 0.7;
-}
-
-.sc-step-error {
-    border-left: 2px solid var(--danger);
-    padding-left: 14px;
-}
-
-.sc-step-icon {
-    font-size: 14px;
-    line-height: 1.4;
-    flex-shrink: 0;
-    width: 20px;
-    text-align: center;
-}
-
-.sc-step-body {
-    flex: 1;
-    min-width: 0;
-}
-
-.sc-step-text {
-    font-size: 13px;
-    color: var(--text);
-    line-height: 1.4;
-}
-
-.sc-step-active .sc-step-text {
-    color: var(--text);
     font-weight: 500;
 }
 
-.sc-step-note {
-    font-size: 11px;
-    color: var(--text-muted);
-    margin-top: 3px;
-    font-family: var(--font-mono);
-    line-height: 1.4;
+.sc-step-done {
+    text-decoration: line-through;
+    opacity: 0.4;
+}
+
+.sc-step-error {
+    color: var(--danger);
+    border-left-color: var(--danger);
 }
 
 .sc-status-bar {
@@ -1410,4 +1385,122 @@ button:disabled {
     min-height: 32px;
     flex-shrink: 0;
     background: var(--bg-sidebar);
+}
+
+/* ── Scenario progress widget (inside .chat-area) ─── */
+.scenario-progress {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-sidebar);
+    display: flex;
+    flex-direction: column;
+    max-height: 240px;
+}
+
+.sc-prog-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 12px;
+    height: 32px;
+    flex-shrink: 0;
+}
+
+.sc-prog-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sc-prog-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+}
+
+.sc-prog-toggle {
+    font-size: 12px;
+    padding: 2px 6px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+}
+
+.sc-prog-toggle.collapsed {
+    transform: rotate(-90deg);
+}
+
+.sc-prog-stop {
+    flex: 0 0 auto;
+    padding: 3px 10px;
+    font-size: 12px;
+    background: var(--danger) !important;
+    color: #fff !important;
+    border-color: transparent !important;
+}
+
+.sc-prog-stop:hover:not(:disabled) {
+    opacity: 0.85;
+}
+
+.sc-prog-bar-wrap {
+    height: 2px;
+    background: var(--border);
+    flex-shrink: 0;
+}
+
+.sc-prog-bar {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s ease;
+}
+
+.sc-prog-list {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+}
+
+.sc-prog-list.hidden {
+    display: none;
+}
+
+.sc-prog-item {
+    padding: 5px 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-left: 2px solid transparent;
+    line-height: 1.5;
+    transition: background-color 0.1s, color 0.1s;
+}
+
+.sc-prog-item.active {
+    color: var(--text);
+    border-left-color: var(--accent);
+    background: var(--bg-raised);
+}
+
+.sc-prog-item.done {
+    text-decoration: line-through;
+    opacity: 0.45;
+}
+
+.sc-prog-item.error {
+    color: var(--danger);
+    border-left-color: var(--danger);
+}
+
+
+/* scenario step divider in chat history */
+.message.scenario-step .message-content {
+    border-left: 2px solid var(--accent);
+    color: var(--accent);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    opacity: 0.9;
+    padding: 4px 12px;
 }
