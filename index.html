@@ -37,7 +37,13 @@
                 </section>
 
                 <section class="control-section">
-                    <h2>toio</h2>
+                    <div class="section-title-row">
+                        <h2>toio</h2>
+                        <div class="cube-mode-toggle" role="tablist" aria-label="キューブ台数">
+                            <button class="cube-mode-btn active" data-cube-mode="single" role="tab" aria-selected="true">1台</button>
+                            <button class="cube-mode-btn" data-cube-mode="dual" role="tab" aria-selected="false">2台</button>
+                        </div>
+                    </div>
                     <div class="status-indicator">
                         <span id="toio-status-dot" class="dot disconnected"></span>
                         <span id="toio-status-text">Disconnected</span>
@@ -52,7 +58,7 @@
                         <button id="connect-toio-btn" class="secondary-btn">Connect Cube</button>
                         <button id="disconnect-toio-btn" class="secondary-btn" disabled>Disconnect</button>
                     </div>
-                    <small class="hint">未接続でもシミュレータで動作確認できます。</small>
+                    <small class="hint" id="toio-hint">未接続でもシミュレータで動作確認できます。</small>
                 </section>
 
                 <section class="control-section">
@@ -145,7 +151,8 @@
                 <section class="control-section simulation-container">
                     <h2>Simulation</h2>
                     <div id="simulation-mat" class="simulation-mat">
-                        <div id="sim-cube" class="sim-cube">toio</div>
+                        <div id="sim-cube" class="sim-cube" data-cube="tom">トム</div>
+                        <div id="sim-cube-2" class="sim-cube" data-cube="io" style="display:none">イオ</div>
                         <div id="ghost-cube" class="sim-cube ghost" style="display: none;">REAL</div>
                         <div id="hand-marker" class="hand-marker" style="display:none;" title="検出された手の位置">✋</div>
                     </div>
@@ -247,6 +254,7 @@
     <script src="js/agent-loop.js"></script>
     <script src="js/scenario-runner.js"></script>
     <script src="js/scenario-panel.js"></script>
+    <script src="js/dual-chat.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

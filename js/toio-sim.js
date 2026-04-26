@@ -2,15 +2,16 @@
  * Simulator class for toio™ Core Cube in Browser
  */
 class ToioSim {
-    constructor(spatialAwareness = null) {
+    constructor(spatialAwareness = null, options = {}) {
         this.spatial = spatialAwareness;
-        this.cubeElement = document.getElementById('sim-cube');
+        const cubeElementId = options.cubeElementId || 'sim-cube';
+        this.cubeElement = document.getElementById(cubeElementId);
         this.matElement = document.getElementById('simulation-mat');
-        
+
         // Initial state in MAT COORDINATES (X: 98-402, Y: 142-358 for Simple Mat)
-        this.x = 250;
-        this.y = 250;
-        this.angle = 0; // Degrees
+        this.x = options.initialX ?? 250;
+        this.y = options.initialY ?? 250;
+        this.angle = options.initialAngle ?? 0; // Degrees
         
         this.leftSpeed = 0;
         this.rightSpeed = 0;

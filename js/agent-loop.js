@@ -9,6 +9,10 @@ class AgentLoop {
         this.onStep = options.onStep || (() => {});
         this.isCancelled = false;
 
+        // 2台モード用: 自分のキューブ名と相棒名。デフォルトは従来どおり「トム」単独。
+        this.cubeName = options.cubeName || 'トム';
+        this.peerName = options.peerName || null;
+
         // 後方互換: 旧コードが this.ollama を参照していても動くようにエイリアス。
         this.ollama = llmClient;
     }
@@ -71,8 +75,12 @@ class AgentLoop {
 
         try {
             const memoryContext = this.memory.buildContextString();
+            const peerLine = this.peerName
+                ? `同じマット上には相棒「${this.peerName}」がもう1台います（別のエージェントが操作中）。あなたは「${this.cubeName}」だけを操作してください。「${this.peerName}」には触れず、衝突しないよう距離を取って動くこと。環境状態に「相棒の位置」が含まれます。`
+                : "";
             const executorSystemPrompt = [
-                `あなたは toio キューブを操作するエージェント「トム」です。`,
+                `あなたは toio キューブ「${this.cubeName}」を操作するエージェントです。`,
+                peerLine,
                 memoryContext ? memoryContext : "",
                 ``,
                 `## 基本方針`,

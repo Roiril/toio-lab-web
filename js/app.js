@@ -61,6 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.querySelectorAll('.mode-tab').forEach(tab => {
         tab.addEventListener('click', () => {
+            if (tab.disabled) return;
             if (tab.dataset.mode === currentMode) return;
             switchMode(tab.dataset.mode);
         });
@@ -127,12 +128,23 @@ document.addEventListener("DOMContentLoaded", () => {
         updateSettingsVisibility();
     }
 
-    let llmClient = null;
-    if (savedProvider === 'ollama') {
-        llmClient = new OllamaClient(savedOllamaBaseUrl, savedOllamaModel);
-    } else if (savedProvider === 'gemini') {
-        llmClient = new GeminiClient(savedApiKey, savedGeminiModel);
+    // LLM クライアントのファクトリ（1台/2台モードで都度新インスタンスを作るため）
+    function createLlmClient() {
+        const provider = localStorage.getItem('llm_provider') || savedProvider;
+        if (provider === 'ollama') {
+            const url = localStorage.getItem('ollama_base_url') || savedOllamaBaseUrl;
+            const model = localStorage.getItem('ollama_model') || savedOllamaModel;
+            return new OllamaClient(url, model);
+        }
+        if (provider === 'gemini') {
+            const key = localStorage.getItem('gemini_api_key') || savedApiKey;
+            const model = localStorage.getItem('gemini_model') || savedGeminiModel;
+            return new GeminiClient(key, model);
+        }
+        return null;
     }
+
+    let llmClient = createLlmClient();
 
     const sessionMemory = new SessionMemory();
     const environment = new Environment(toioSim, toioBle, spatialAwareness);
@@ -182,10 +194,69 @@ document.addEventListener("DOMContentLoaded", () => {
     let pendingCameraCapture = null; // base64 string to attach to next LLM message
     let hasSyncedInitialPosition = false;
 
-    // Agent Loop initialization
+    // Agent Loop initialization (1台モード = トム単独)
     let agentLoop = llmClient
-        ? new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, { onStep: handleAgentStep })
+        ? new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
+            cubeName: 'トム',
+            onStep: handleAgentStep,
+        })
         : null;
+
+    // --- Dual cube mode (トム + イオ) ---
+    let cubeMode = 'single'; // 'single' | 'dual'
+    const dualController = new DualChatController({
+        spatial: spatialAwareness,
+        sessionMemory,
+        toioBle,
+        simA: toioSim,
+        chatAreaEl: chatArea,
+        llmFactory: createLlmClient,
+        onProcessingChange: () => { /* 必要なら全体ステータスに反映 */ },
+    });
+    const cubeModeToggle = document.querySelector('.cube-mode-toggle');
+    const scenarioTabBtn = document.querySelector('.mode-tab[data-mode="scenario"]');
+
+    function setCubeMode(mode) {
+        if (mode === cubeMode) return;
+        if (mode === 'dual') {
+            // Scenario モード中は切り替えを拒否（チャットモードに戻してもらう）
+            if (currentMode === 'scenario') {
+                if (scenarioRunner && scenarioRunner.isRunning) return;
+                switchMode('chat');
+            }
+            dualController.enable();
+            cubeMode = 'dual';
+        } else {
+            // 進行中の dual タスクがあったらキャンセル後に解除
+            dualController.disable();
+            cubeMode = 'single';
+        }
+        // トグル UI 反映
+        if (cubeModeToggle) {
+            cubeModeToggle.querySelectorAll('.cube-mode-btn').forEach(b => {
+                const on = b.dataset.cubeMode === cubeMode;
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+        }
+        // Scenario タブを 2 台モード中は無効化
+        if (scenarioTabBtn) {
+            scenarioTabBtn.disabled = (cubeMode === 'dual');
+            scenarioTabBtn.title = (cubeMode === 'dual') ? '2台モード中はシナリオを使用できません' : '';
+            scenarioTabBtn.style.opacity = (cubeMode === 'dual') ? '0.4' : '';
+            scenarioTabBtn.style.cursor = (cubeMode === 'dual') ? 'not-allowed' : '';
+        }
+        // sim-readout を即時更新
+        renderSimReadout();
+    }
+
+    if (cubeModeToggle) {
+        cubeModeToggle.addEventListener('click', (e) => {
+            const btn = e.target.closest('.cube-mode-btn');
+            if (!btn || btn.disabled) return;
+            setCubeMode(btn.dataset.cubeMode);
+        });
+    }
 
     // --- Scenario mode ---
     const scenarioPanel = new ScenarioPanel(scenarioPanelEl);
@@ -496,13 +567,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // シミュレータ下の座標/角度表示を更新するループ（軽量）
+    // Single モード: 1 行表示 / Dual モード: トム・イオの 2 行表示
     const simReadout = document.getElementById('sim-readout');
-    if (simReadout) {
-        setInterval(() => {
+    function renderSimReadout() {
+        if (!simReadout) return;
+        if (cubeMode === 'dual') {
+            const lines = dualController.getReadoutLines() || [];
+            simReadout.classList.add('dual');
+            simReadout.innerHTML = lines.map(l =>
+                `<div class="readout-row"><span class="readout-tag ${l.key}"></span><span>${l.name}: (${l.x}, ${l.y}) · ${l.angle}°</span></div>`
+            ).join('');
+        } else {
+            simReadout.classList.remove('dual');
             const snap = environment.getSnapshot();
             const c = snap.cube;
             simReadout.textContent = `(${Math.round(c.x)}, ${Math.round(c.y)}) · ${Math.round(c.angle)}°`;
-        }, 120);
+        }
+    }
+    if (simReadout) {
+        setInterval(renderSimReadout, 120);
     }
 
     saveSettingsBtn.addEventListener('click', () => {
@@ -538,6 +621,7 @@ document.addEventListener("DOMContentLoaded", () => {
         // Re-init agent loop
         if (llmClient) {
             agentLoop = new AgentLoop(llmClient, executor, environment, sessionMemory, spatialAwareness, {
+                cubeName: 'トム',
                 onStep: handleAgentStep
             });
         }

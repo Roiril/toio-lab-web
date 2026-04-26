@@ -4,7 +4,8 @@
 class ToioCombined {
     constructor(toioSim, toioBle) {
         this.sim = toioSim;
-        this.ble = toioBle;
+        // ble が未指定の場合は「常に未接続」のスタブ。Sim 専用キューブ（イオ）で利用。
+        this.ble = toioBle || { isConnected: false };
     }
 
     get isConnected() {

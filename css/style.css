@@ -1748,3 +1748,175 @@ button:disabled {
     opacity: 0.9;
     padding: 4px 12px;
 }
+
+/* === 2 cubes (Dual mode) =================================== */
+
+/* キューブ識別色: トム=シアン系, イオ=マゼンタ系 */
+:root {
+    --cube-tom: #4ec9b0;
+    --cube-io:  #c586c0;
+}
+
+.sim-cube[data-cube="tom"] { background: var(--cube-tom); color: #1e1e1e; }
+.sim-cube[data-cube="io"]  { background: var(--cube-io);  color: #1e1e1e; }
+
+/* サイドバー toio セクションのモードトグル（h2 と並列配置） */
+.section-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+.section-title-row h2 { margin-bottom: 0; }
+
+.cube-mode-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+}
+.cube-mode-btn {
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 11px;
+    padding: 2px 8px;
+    border: none;
+    border-radius: 0;
+    font-family: var(--font-main);
+    line-height: 1.4;
+}
+.cube-mode-btn + .cube-mode-btn { border-left: 1px solid var(--border); }
+.cube-mode-btn:hover:not(.active):not(:disabled) { color: var(--text); }
+.cube-mode-btn.active {
+    background: var(--accent);
+    color: #fff;
+}
+.cube-mode-btn:disabled { cursor: not-allowed; opacity: 0.4; }
+
+/* sim-readout: 2 行表示（dual モード時） */
+.sim-readout.dual {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    font-size: 10px;
+    line-height: 1.4;
+}
+.sim-readout .readout-row { display: flex; align-items: center; gap: 6px; }
+.sim-readout .readout-tag {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.sim-readout .readout-tag.tom { background: var(--cube-tom); }
+.sim-readout .readout-tag.io  { background: var(--cube-io); }
+
+/* ==== Dual chat: 縦線で 2 カラム分割 ==== */
+.dual-chat {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    overflow: hidden;
+}
+.chat-column {
+    flex: 1 1 50%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-sidebar);
+}
+.chat-column + .chat-column {
+    border-left: 1px solid var(--border);
+}
+.chat-column-header {
+    padding: 6px 12px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-raised);
+    flex-shrink: 0;
+}
+.chat-column-header .cube-tag {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+}
+.chat-column-header .cube-tag.tom { background: var(--cube-tom); }
+.chat-column-header .cube-tag.io  { background: var(--cube-io); }
+.chat-column-header .cube-name {
+    color: var(--text);
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: none;
+    font-size: 12px;
+}
+.chat-column-header .cube-role {
+    color: var(--text-muted);
+    font-size: 10px;
+    margin-left: auto;
+}
+.chat-column .chat-history {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+    min-height: 0;
+}
+.chat-column .chat-input-container {
+    border-top: 1px solid var(--border);
+    padding: 8px 10px;
+    flex-shrink: 0;
+}
+.chat-column .chat-input-row {
+    display: flex;
+    gap: 6px;
+    align-items: flex-end;
+}
+.chat-column textarea.chat-input {
+    flex: 1;
+    background: var(--bg-input);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 6px 8px;
+    font-family: var(--font-main);
+    font-size: 12px;
+    resize: none;
+    max-height: 80px;
+    min-height: 28px;
+    border-radius: 0;
+}
+.chat-column textarea.chat-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.chat-column .send-btn,
+.chat-column .stop-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: 0;
+}
+.chat-column .send-btn:disabled { background: var(--bg-raised); color: var(--text-muted); cursor: not-allowed; }
+.chat-column .stop-btn { background: var(--danger); }
+
+/* dual モード用ウェルカム */
+.dual-welcome {
+    color: var(--text-muted);
+    font-size: 12px;
+    padding: 8px 4px;
+}
+.dual-welcome .dual-welcome-title {
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
