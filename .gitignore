@@ -42,3 +42,4 @@ js/config.js
 # Playwright MCP 検証成果物
 .playwright-mcp/
 
+.claude/worktrees/
